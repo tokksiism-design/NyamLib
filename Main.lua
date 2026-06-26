@@ -2,11 +2,12 @@
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
 
 local iOSLibrary = {}
 iOSLibrary.__index = iOSLibrary
 
--- Константы стиля (iOS Dark/Translucent стиль)
+-- iOS Dark Theme Config
 local THEME = {
 	BgColor = Color3.fromRGB(28, 28, 30),
 	ContainerColor = Color3.fromRGB(44, 44, 46),
@@ -15,7 +16,7 @@ local THEME = {
 	TextColor = Color3.fromRGB(255, 255, 255),
 	SecondaryText = Color3.fromRGB(142, 142, 147),
 	DividerColor = Color3.fromRGB(58, 58, 60),
-	Font = Enum.Font.SFMono, -- Ближайший по духу к системному
+	Font = Enum.Font.SFMono,
 }
 
 local function createTween(obj: Instance, info: TweenInfo, properties: {[string]: any})
@@ -24,23 +25,33 @@ local function createTween(obj: Instance, info: TweenInfo, properties: {[string]
 	return tween
 end
 
--- Создание основного окна
+-- Инициализация окна
 function iOSLibrary.new(title: string)
 	local self = setmetatable({}, iOSLibrary)
 	
-	-- Родительский контейнер для UI
-	local player = Players.LocalPlayer
-	local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
+	-- [ФИКС]: Чистим старое меню при перезапуске скрипта
+	local menuName = "iOS_Internal_Menu_Protected"
+	local oldMenu = CoreGui:FindFirstChild(menuName) or (Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui"):FindFirstChild(menuName))
+	if oldMenu then 
+		oldMenu:Destroy() 
+	end
 	
 	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "iOS_Menu_Library"
+	screenGui.Name = menuName
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	screenGui.Parent = playerGui
+	
+	-- [ФИКС]: Безопасный инжект в зависимости от среды выполнения
+	local success, _ = pcall(function()
+		screenGui.Parent = CoreGui
+	end)
+	if not success then
+		screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
 	
 	self.ScreenGui = screenGui
 	
-	-- Главный фрейм окна
+	-- Главный фрейм
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(0, 320, 0, 400)
 	mainFrame.Position = UDim2.new(0.5, -160, 0.5, -200)
@@ -53,7 +64,7 @@ function iOSLibrary.new(title: string)
 	mainCorner.CornerRadius = UDim.new(0, 14)
 	mainCorner.Parent = mainFrame
 	
-	-- Хедер (Заголовок)
+	-- Хедер
 	local header = Instance.new("Frame")
 	header.Size = UDim2.new(1, 0, 0, 50)
 	header.BackgroundTransparency = 1
@@ -64,19 +75,19 @@ function iOSLibrary.new(title: string)
 	titleLabel.Position = UDim2.new(0, 20, 0, 0)
 	titleLabel.Text = title
 	titleLabel.Font = THEME.Font
-	titleLabel.TextSize = 18
+	titleLabel.TextSize = 17
 	titleLabel.TextColor3 = THEME.TextColor
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Parent = header
 	
-	-- Контейнер для элементов (Скролл)
+	-- Скролл-контейнер для элементов
 	local container = Instance.new("ScrollingFrame")
 	container.Size = UDim2.new(1, -20, 1, -60)
 	container.Position = UDim2.new(0, 10, 0, 50)
 	container.BackgroundTransparency = 1
 	container.BorderSizePixel = 0
-	container.ScrollBarThickness = 3
+	container.ScrollBarThickness = 2
 	container.ScrollBarImageColor3 = THEME.SecondaryText
 	container.CanvasSize = UDim2.new(0, 0, 0, 0)
 	container.Parent = mainFrame
@@ -93,7 +104,7 @@ function iOSLibrary.new(title: string)
 	self.MainFrame = mainFrame
 	self.Container = container
 	
-	-- Логика перетаскивания (Drag) с поддержкой Mouse & Multi-touch
+	-- Логика перетаскивания (Mouse + Multi-Touch)
 	local dragging = false
 	local dragInput: InputObject? = nil
 	local dragStart = Vector3.new()
@@ -122,10 +133,17 @@ function iOSLibrary.new(title: string)
 		end
 	end)
 	
+	-- [ДОБАВЛЕНО]: Бинд на скрытие меню (RightShift)
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
+			screenGui.Enabled = not screenGui.Enabled
+		end
+	end)
+	
 	return self
 end
 
--- Элемент: ТОГГЛ (Switch)
+-- Элемент: Toggle
 function iOSLibrary:Toggle(label: string, default: boolean, callback: (boolean) -> ())
 	local state = default
 	
@@ -143,13 +161,12 @@ function iOSLibrary:Toggle(label: string, default: boolean, callback: (boolean) 
 	textLabel.Position = UDim2.new(0, 15, 0, 0)
 	textLabel.Text = label
 	textLabel.Font = THEME.Font
-	textLabel.TextSize = 15
+	textLabel.TextSize = 14
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = itemFrame
 	
-	-- Конструкция iOS свитча
 	local switchBg = Instance.new("Frame")
 	switchBg.Size = UDim2.new(0, 51, 0, 31)
 	switchBg.Position = UDim2.new(1, -66, 0.5, -15)
@@ -170,14 +187,13 @@ function iOSLibrary:Toggle(label: string, default: boolean, callback: (boolean) 
 	thumbCorner.CornerRadius = UDim.new(1, 0)
 	thumbCorner.Parent = thumb
 	
-	-- Обработка клика/тача
 	local function toggle()
 		state = not state
 		local targetColor = state and THEME.ToggleOnColor or THEME.DividerColor
 		local targetPos = state and UDim2.new(1, -29, 0.5, -13.5) or UDim2.new(0, 2, 0.5, -13.5)
 		
-		createTween(switchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor})
-		createTween(thumb, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Position = targetPos})
+		createTween(switchBg, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = targetColor})
+		createTween(thumb, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Position = targetPos})
 		
 		task.spawn(callback, state)
 	end
@@ -189,7 +205,7 @@ function iOSLibrary:Toggle(label: string, default: boolean, callback: (boolean) 
 	end)
 end
 
--- Элемент: СЛАЙДЕР (Драггер значений)
+-- Элемент: Slider
 function iOSLibrary:Slider(label: string, min: number, max: number, default: number, callback: (number) -> ())
 	local currentVal = math.clamp(default, min, max)
 	
@@ -218,13 +234,12 @@ function iOSLibrary:Slider(label: string, min: number, max: number, default: num
 	valueLabel.Position = UDim2.new(0.72, 0, 0, 5)
 	valueLabel.Text = string.format("%.1f", currentVal)
 	valueLabel.Font = THEME.Font
-	valueLabel.TextSize = 14
+	valueLabel.TextSize = 13
 	valueLabel.TextColor3 = THEME.SecondaryText
 	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
 	valueLabel.BackgroundTransparency = 1
 	valueLabel.Parent = itemFrame
 	
-	-- Трек слайдера
 	local sliderTrack = Instance.new("Frame")
 	sliderTrack.Size = UDim2.new(1, -30, 0, 6)
 	sliderTrack.Position = UDim2.new(0, 15, 0, 42)
@@ -236,7 +251,6 @@ function iOSLibrary:Slider(label: string, min: number, max: number, default: num
 	trackCorner.CornerRadius = UDim.new(1, 0)
 	trackCorner.Parent = sliderTrack
 	
-	-- Заполненная часть трека
 	local sliderFill = Instance.new("Frame")
 	sliderFill.Size = UDim2.new((currentVal - min) / (max - min), 0, 1, 0)
 	sliderFill.BackgroundColor3 = THEME.AccentColor
@@ -247,7 +261,7 @@ function iOSLibrary:Slider(label: string, min: number, max: number, default: num
 	fillCorner.CornerRadius = UDim.new(1, 0)
 	fillCorner.Parent = sliderFill
 	
-	-- Продвинутый Мульти-тач / Мышь трекинг по ID инпута
+	-- Продвинутый Multi-Touch трекинг по InputObject ID
 	local isDragging = false
 	local activeInput: InputObject? = nil
 	
@@ -285,7 +299,7 @@ function iOSLibrary:Slider(label: string, min: number, max: number, default: num
 	end)
 end
 
--- Элемент: ДИНАМИЧЕСКАЯ ПЕРЕМЕННАЯ / ВВОД (ImGui-like Variable Input)
+-- Элемент: Variable (Текстовое поле, ImGui Style)
 function iOSLibrary:Variable(label: string, default: string, callback: (string) -> ())
 	local itemFrame = Instance.new("Frame")
 	itemFrame.Size = UDim2.new(1, 0, 0, 44)
@@ -301,20 +315,19 @@ function iOSLibrary:Variable(label: string, default: string, callback: (string) 
 	textLabel.Position = UDim2.new(0, 15, 0, 0)
 	textLabel.Text = label
 	textLabel.Font = THEME.Font
-	textLabel.TextSize = 15
+	textLabel.TextSize = 14
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = itemFrame
 	
-	-- Поле ввода в стиле iOS текстовых полей
 	local inputBox = Instance.new("TextBox")
 	inputBox.Size = UDim2.new(0.5, -15, 0, 30)
 	inputBox.Position = UDim2.new(0.5, 0, 0.5, -15)
 	inputBox.BackgroundColor3 = THEME.BgColor
 	inputBox.Text = default
 	inputBox.Font = THEME.Font
-	inputBox.TextSize = 14
+	inputBox.TextSize = 13
 	inputBox.TextColor3 = THEME.TextColor
 	inputBox.ClipsDescendants = true
 	inputBox.ClearTextOnFocus = false
@@ -325,10 +338,10 @@ function iOSLibrary:Variable(label: string, default: string, callback: (string) 
 	boxCorner.CornerRadius = UDim.new(0, 6)
 	boxCorner.Parent = inputBox
 	
-	-- Фиксация изменения переменной при потере фокуса (или энтере)
-	inputBox.FocusLost:Connect(function(enterPressed)
+	inputBox.FocusLost:Connect(function()
 		task.spawn(callback, inputBox.Text)
 	end)
 end
 
+-- Обязательно возвращаем объект библиотеки для loadstring()()
 return iOSLibrary
