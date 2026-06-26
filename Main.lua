@@ -16,7 +16,7 @@ local THEME = {
 	TextColor = Color3.fromRGB(255, 255, 255),
 	SecondaryText = Color3.fromRGB(142, 142, 147),
 	DividerColor = Color3.fromRGB(58, 58, 60),
-	Font = Enum.Font.SFMono,
+	Font = Enum.Font.SourceSans, -- ИСПРАВЛЕНО: SFMono не существовал в Roblox
 }
 
 local function createTween(obj: Instance, info: TweenInfo, properties: {[string]: any})
@@ -29,9 +29,10 @@ end
 function iOSLibrary.new(title: string)
 	local self = setmetatable({}, iOSLibrary)
 	
-	-- [ФИКС]: Чистим старое меню при перезапуске скрипта
+	-- Чистим старое меню при перезапуске скрипта
 	local menuName = "iOS_Internal_Menu_Protected"
-	local oldMenu = CoreGui:FindFirstChild(menuName) or (Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui"):FindFirstChild(menuName))
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChild("PlayerGui")
+	local oldMenu = CoreGui:FindFirstChild(menuName) or (playerGui and playerGui:FindFirstChild(menuName))
 	if oldMenu then 
 		oldMenu:Destroy() 
 	end
@@ -41,12 +42,16 @@ function iOSLibrary.new(title: string)
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	
-	-- [ФИКС]: Безопасный инжект в зависимости от среды выполнения
+	-- Безопасный инжект в зависимости от среды выполнения
 	local success, _ = pcall(function()
 		screenGui.Parent = CoreGui
 	end)
 	if not success then
-		screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+		if playerGui then
+			screenGui.Parent = playerGui
+		else
+			screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+		end
 	end
 	
 	self.ScreenGui = screenGui
@@ -133,7 +138,7 @@ function iOSLibrary.new(title: string)
 		end
 	end)
 	
-	-- [ДОБАВЛЕНО]: Бинд на скрытие меню (RightShift)
+	-- Бинд на скрытие меню (RightShift)
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
 			screenGui.Enabled = not screenGui.Enabled
@@ -343,5 +348,4 @@ function iOSLibrary:Variable(label: string, default: string, callback: (string) 
 	end)
 end
 
--- Обязательно возвращаем объект библиотеки для loadstring()()
 return iOSLibrary
