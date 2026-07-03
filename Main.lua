@@ -10,25 +10,21 @@ iOSLibrary.__index = iOSLibrary
 local TabClass = {}
 TabClass.__index = TabClass
 
-local RowClass = {}
-RowClass.__index = RowClass
-
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
--- Строгий монохромный дизайн
 local THEME = {
 	BgColor = Color3.fromRGB(0, 0, 0),
 	ContainerColor = Color3.fromRGB(28, 28, 30),
 	SidebarColor = Color3.fromRGB(16, 16, 18),
 	AccentColor = Color3.fromRGB(255, 255, 255),
 	ToggleOnColor = Color3.fromRGB(48, 209, 88),
+	DangerColor = Color3.fromRGB(255, 69, 58),      -- iOS красный
 	TextColor = Color3.fromRGB(255, 255, 255),
 	SecondaryText = Color3.fromRGB(142, 142, 147),
 	DividerColor = Color3.fromRGB(44, 44, 46),
 	Font = Enum.Font.Gotham,
 }
 
--- Быстрые тайминги как в iOS
 local T_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local T_PRESS = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local T_RELEASE = TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
@@ -44,7 +40,6 @@ local function isTouchOrMouse(input)
 		or input.UserInputType == Enum.UserInputType.Touch
 end
 
--- Надёжное отслеживание конца касания (работает даже если палец ушёл с элемента)
 local function watchInputEnd(input, callback)
 	local conn
 	conn = input.Changed:Connect(function()
@@ -56,7 +51,6 @@ local function watchInputEnd(input, callback)
 	end)
 end
 
--- iOS-эффект нажатия: элемент слегка увеличивается на пару пикселей
 local function attachPressEffect(btn, scaleAmount)
 	local uiScale = Instance.new("UIScale")
 	uiScale.Scale = 1
@@ -73,8 +67,86 @@ local function attachPressEffect(btn, scaleAmount)
 	return uiScale
 end
 
-local function preventClickThrough(instance)
-	instance.Active = true
+----------------------------------------------------
+-- РИСОВАННЫЕ ИКОНКИ (без спец-символов)
+----------------------------------------------------
+local function drawCross(parent, size, color, thickness)
+	-- Крестик из двух повернутых полосок
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(0, size, 0, size)
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.new(0.5, 0, 0.5, 0)
+	holder.BackgroundTransparency = 1
+	holder.Parent = parent
+
+	for _, rot in ipairs({45, -45}) do
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(1, 0, 0, thickness or 2)
+		line.AnchorPoint = Vector2.new(0.5, 0.5)
+		line.Position = UDim2.new(0.5, 0, 0.5, 0)
+		line.Rotation = rot
+		line.BackgroundColor3 = color
+		line.BorderSizePixel = 0
+		line.Parent = holder
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(1, 0)
+		c.Parent = line
+	end
+	return holder
+end
+
+local function drawBurger(parent, size, color)
+	-- Три полоски
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(0, size, 0, size)
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.Position = UDim2.new(0.5, 0, 0.5, 0)
+	holder.BackgroundTransparency = 1
+	holder.Parent = parent
+
+	for i = 0, 2 do
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(1, 0, 0, 2)
+		line.Position = UDim2.new(0, 0, 0, math.floor(i * (size - 2) / 2))
+		line.BackgroundColor3 = color
+		line.BorderSizePixel = 0
+		line.Parent = holder
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(1, 0)
+		c.Parent = line
+	end
+	return holder
+end
+
+local function drawChevron(parent, size, color)
+	-- Галочка "v" из двух полосок, поворачиваем holder для смены направления
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(0, size, 0, size)
+	holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	holder.BackgroundTransparency = 1
+	holder.Parent = parent
+
+	local l1 = Instance.new("Frame")
+	l1.Size = UDim2.new(0.62, 0, 0, 2)
+	l1.AnchorPoint = Vector2.new(1, 0.5)
+	l1.Position = UDim2.new(0.5, 1, 0.55, 0)
+	l1.Rotation = 45
+	l1.BackgroundColor3 = color
+	l1.BorderSizePixel = 0
+	l1.Parent = holder
+	local c1 = Instance.new("UICorner"); c1.CornerRadius = UDim.new(1, 0); c1.Parent = l1
+
+	local l2 = Instance.new("Frame")
+	l2.Size = UDim2.new(0.62, 0, 0, 2)
+	l2.AnchorPoint = Vector2.new(0, 0.5)
+	l2.Position = UDim2.new(0.5, -1, 0.55, 0)
+	l2.Rotation = -45
+	l2.BackgroundColor3 = color
+	l2.BorderSizePixel = 0
+	l2.Parent = holder
+	local c2 = Instance.new("UICorner"); c2.CornerRadius = UDim.new(1, 0); c2.Parent = l2
+
+	return holder
 end
 
 local function makeSwitch(parent, size, posX, state)
@@ -103,12 +175,78 @@ local function makeSwitch(parent, size, posX, state)
 end
 
 ----------------------------------------------------
+-- ТЕНЬ (imgui-стиль: градиент от полупрозрачного к прозрачному)
+-- 4 стороны + 4 угла, без картинок-ассетов
+----------------------------------------------------
+local function buildShadow(mainFrame, spread)
+	spread = spread or 24
+	local holder = Instance.new("Frame")
+	holder.Name = "ShadowHolder"
+	holder.Size = UDim2.new(1, spread * 2, 1, spread * 2)
+	holder.Position = UDim2.new(0, -spread, 0, -spread)
+	holder.BackgroundTransparency = 1
+	holder.ZIndex = 0
+	holder.Visible = false
+	holder.Parent = mainFrame
+
+	local function edge(size, pos, rotation)
+		local f = Instance.new("Frame")
+		f.Size = size
+		f.Position = pos
+		f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		f.BorderSizePixel = 0
+		f.ZIndex = 0
+		f.Parent = holder
+		local g = Instance.new("UIGradient")
+		g.Rotation = rotation
+		-- 1 часть полупрозрачная -> 2 часть полностью прозрачная
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.45),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		g.Parent = f
+		return f
+	end
+
+	-- Стороны (градиент направлен наружу от окна)
+	edge(UDim2.new(1, -spread * 2, 0, spread), UDim2.new(0, spread, 0, 0), -90)              -- верх
+	edge(UDim2.new(1, -spread * 2, 0, spread), UDim2.new(0, spread, 1, -spread), 90)         -- низ
+	edge(UDim2.new(0, spread, 1, -spread * 2), UDim2.new(0, 0, 0, spread), 180)              -- лево
+	edge(UDim2.new(0, spread, 1, -spread * 2), UDim2.new(1, -spread, 0, spread), 0)          -- право
+
+	-- Углы (диагональный градиент)
+	local corners = {
+		{ UDim2.new(0, 0, 0, 0), 135 },              -- левый верх
+		{ UDim2.new(1, -spread, 0, 0), -135 },       -- правый верх (в градусах Roblox: 225)
+		{ UDim2.new(0, 0, 1, -spread), 45 },         -- левый низ
+		{ UDim2.new(1, -spread, 1, -spread), -45 },  -- правый низ
+	}
+	for _, data in ipairs(corners) do
+		local f = Instance.new("Frame")
+		f.Size = UDim2.new(0, spread, 0, spread)
+		f.Position = data[1]
+		f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		f.BorderSizePixel = 0
+		f.ZIndex = 0
+		f.Parent = holder
+		local g = Instance.new("UIGradient")
+		g.Rotation = data[2]
+		g.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		g.Parent = f
+	end
+
+	return holder
+end
+
+----------------------------------------------------
 -- ОКНО
 ----------------------------------------------------
 function iOSLibrary.CreateWindow(title, size)
 	local self = setmetatable({}, iOSLibrary)
 
-	-- Адаптация размера под экран (мобилка)
 	local camera = Workspace.CurrentCamera
 	local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
 	local desired = size or Vector2.new(470, 330)
@@ -121,13 +259,37 @@ function iOSLibrary.CreateWindow(title, size)
 	screenGui.Name = "iOS_Library_Menu"
 	screenGui.ResetOnSpawn = false
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	screenGui.IgnoreGuiInset = false
+	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = 2147483647 -- максимум, ничто не перебьет
 
-	local success = pcall(function() screenGui.Parent = CoreGui end)
-	if not success then
+	-- Экзекьютор-парентинг: gethui -> protect_gui -> CoreGui -> PlayerGui
+	local parented = false
+	if typeof(gethui) == "function" then
+		local ok = pcall(function() screenGui.Parent = gethui() end)
+		parented = ok and screenGui.Parent ~= nil
+	end
+	if not parented and typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+		local ok = pcall(function()
+			syn.protect_gui(screenGui)
+			screenGui.Parent = CoreGui
+		end)
+		parented = ok and screenGui.Parent ~= nil
+	end
+	if not parented then
+		local ok = pcall(function() screenGui.Parent = CoreGui end)
+		parented = ok and screenGui.Parent ~= nil
+	end
+	if not parented then
 		screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	end
 	self.ScreenGui = screenGui
+
+	-- Защита: если кто-то сбросит DisplayOrder — вернем максимум
+	screenGui:GetPropertyChangedSignal("DisplayOrder"):Connect(function()
+		if screenGui.DisplayOrder ~= 2147483647 then
+			screenGui.DisplayOrder = 2147483647
+		end
+	end)
 
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(0, windowSize.X, 0, windowSize.Y)
@@ -135,13 +297,12 @@ function iOSLibrary.CreateWindow(title, size)
 	mainFrame.BackgroundColor3 = THEME.BgColor
 	mainFrame.BorderSizePixel = 0
 	mainFrame.Visible = false
+	mainFrame.Active = true
 	mainFrame.Parent = screenGui
-	preventClickThrough(mainFrame)
 
 	local windowScale = Instance.new("UIScale")
 	windowScale.Scale = 1
 	windowScale.Parent = mainFrame
-	self.WindowScale = windowScale
 
 	local mainCorner = Instance.new("UICorner")
 	mainCorner.CornerRadius = UDim.new(0, 14)
@@ -152,13 +313,17 @@ function iOSLibrary.CreateWindow(title, size)
 	mainStroke.Thickness = 1
 	mainStroke.Parent = mainFrame
 
+	-- Тень (по дефолту выключена, тумблер в Settings)
+	local shadowHolder = buildShadow(mainFrame, 24)
+	self.ShadowHolder = shadowHolder
+
 	local headerH = IS_MOBILE and 46 or 42
 	local header = Instance.new("Frame")
 	header.Size = UDim2.new(1, 0, 0, headerH)
 	header.BackgroundColor3 = THEME.ContainerColor
 	header.BorderSizePixel = 0
+	header.Active = true
 	header.Parent = mainFrame
-	preventClickThrough(header)
 
 	local headerCorner = Instance.new("UICorner")
 	headerCorner.CornerRadius = UDim.new(0, 14)
@@ -182,21 +347,19 @@ function iOSLibrary.CreateWindow(title, size)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Parent = header
 
-	-- Кнопка закрытия (вместо "тап по шапке закрывает" — надёжнее на мобилке)
+	-- Кнопка сворачивания (крестик нарисован фреймами)
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Size = UDim2.new(0, headerH - 14, 0, headerH - 14)
 	closeBtn.Position = UDim2.new(1, -(headerH - 7), 0.5, -(headerH - 14) / 2)
 	closeBtn.BackgroundColor3 = THEME.DividerColor
-	closeBtn.Text = "✕"
-	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.TextSize = 13
-	closeBtn.TextColor3 = THEME.TextColor
+	closeBtn.Text = ""
 	closeBtn.AutoButtonColor = false
 	closeBtn.Parent = header
 
 	local closeCorner = Instance.new("UICorner")
 	closeCorner.CornerRadius = UDim.new(1, 0)
 	closeCorner.Parent = closeBtn
+	drawCross(closeBtn, 12, THEME.TextColor, 2)
 	attachPressEffect(closeBtn, 1.08)
 
 	local headerLine = Instance.new("Frame")
@@ -217,8 +380,8 @@ function iOSLibrary.CreateWindow(title, size)
 	sidebar.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
 	sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
 	sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sidebar.Active = true
 	sidebar.Parent = mainFrame
-	preventClickThrough(sidebar)
 
 	local sidebarLayout = Instance.new("UIListLayout")
 	sidebarLayout.Padding = UDim.new(0, 4)
@@ -235,7 +398,6 @@ function iOSLibrary.CreateWindow(title, size)
 	contentFrame.Size = UDim2.new(1, -(sidebarW + 12), 1, -(headerH + 13))
 	contentFrame.Position = UDim2.new(0, sidebarW + 6, 0, headerH + 7)
 	contentFrame.BackgroundTransparency = 1
-	contentFrame.ClipsDescendants = true
 	contentFrame.Parent = mainFrame
 
 	self.MainFrame = mainFrame
@@ -243,13 +405,13 @@ function iOSLibrary.CreateWindow(title, size)
 	self.SidebarWidth = sidebarW
 	self.ContentFrame = contentFrame
 	self.Tabs = {}
+	self.TabOrder = 0
 	self.CurrentTab = nil
 	self.IsOpen = false
+	self.Destroyed = false
 
-	----------------------------------------------------
-	-- Открытие / закрытие с анимацией
-	----------------------------------------------------
 	function self:SetOpen(open)
+		if self.Destroyed then return end
 		if open == self.IsOpen then return end
 		self.IsOpen = open
 		if open then
@@ -263,13 +425,19 @@ function iOSLibrary.CreateWindow(title, size)
 		end
 	end
 
+	function self:Destroy()
+		if self.Destroyed then return end
+		self.Destroyed = true
+		createTween(windowScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.85 }).Completed:Connect(function()
+			screenGui:Destroy()
+		end)
+	end
+
 	closeBtn.Activated:Connect(function()
 		self:SetOpen(false)
 	end)
 
-	----------------------------------------------------
-	-- Драг шапки с ограничением в пределах экрана
-	----------------------------------------------------
+	-- Драг шапки с ограничением по экрану
 	local dragInput = nil
 	header.InputBegan:Connect(function(input)
 		if not isTouchOrMouse(input) then return end
@@ -296,18 +464,13 @@ function iOSLibrary.CreateWindow(title, size)
 		end)
 	end)
 
-	----------------------------------------------------
-	-- Плавающая кнопка (пузырь) для открытия меню — перетаскиваемая
-	----------------------------------------------------
+	-- Плавающий пузырь (правый верх — не мешает джойстику), гамбургер нарисован
 	local bubbleSize = IS_MOBILE and 52 or 44
 	local bubble = Instance.new("TextButton")
 	bubble.Size = UDim2.new(0, bubbleSize, 0, bubbleSize)
-	bubble.Position = UDim2.new(0, 12, 0.5, -bubbleSize / 2)
+	bubble.Position = UDim2.new(1, -bubbleSize - 12, 0, 70)
 	bubble.BackgroundColor3 = THEME.ContainerColor
-	bubble.Text = "☰"
-	bubble.Font = Enum.Font.GothamBold
-	bubble.TextSize = 20
-	bubble.TextColor3 = THEME.TextColor
+	bubble.Text = ""
 	bubble.AutoButtonColor = false
 	bubble.Parent = screenGui
 
@@ -320,9 +483,9 @@ function iOSLibrary.CreateWindow(title, size)
 	bubbleStroke.Thickness = 1
 	bubbleStroke.Parent = bubble
 
+	drawBurger(bubble, 18, THEME.TextColor)
 	attachPressEffect(bubble, 1.1)
 
-	-- Тап = открыть/закрыть; перетаскивание = двигать пузырь
 	bubble.InputBegan:Connect(function(input)
 		if not isTouchOrMouse(input) then return end
 		local startInputPos = input.Position
@@ -352,9 +515,7 @@ function iOSLibrary.CreateWindow(title, size)
 		end)
 	end)
 
-	----------------------------------------------------
 	-- Уведомления
-	----------------------------------------------------
 	local notifyHolder = Instance.new("Frame")
 	notifyHolder.Size = UDim2.new(0, 240, 1, -20)
 	notifyHolder.Position = UDim2.new(1, -250, 0, 10)
@@ -364,7 +525,6 @@ function iOSLibrary.CreateWindow(title, size)
 	local notifyLayout = Instance.new("UIListLayout")
 	notifyLayout.Padding = UDim.new(0, 6)
 	notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	notifyLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 	notifyLayout.Parent = notifyHolder
 
 	function self:Notify(text, duration)
@@ -410,30 +570,111 @@ function iOSLibrary.CreateWindow(title, size)
 		end)
 	end
 
-	-- Двойной тап по центру экрана открывает меню (запасной способ)
-	local lastTapTime = 0
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed or self.IsOpen then return end
-		if isTouchOrMouse(input) then
-			local cam = Workspace.CurrentCamera
-			if not cam then return end
-			local screenCenter = cam.ViewportSize / 2
-			local inputPos = Vector2.new(input.Position.X, input.Position.Y)
-			if (inputPos - screenCenter).Magnitude <= 160 then
-				local currentTime = os.clock()
-				if currentTime - lastTapTime <= 0.35 then
-					self:SetOpen(true)
-				end
-				lastTapTime = currentTime
-			end
+	----------------------------------------------------
+	-- ВКЛАДКА SETTINGS (всегда последняя, LayoutOrder 9999)
+	----------------------------------------------------
+	task.defer(function()
+		local settingsTab = self:CreateTab("Settings")
+		settingsTab.Button.LayoutOrder = 9999
+
+		settingsTab:Section("Interface")
+
+		settingsTab:Toggle("Shadow", false, function(state)
+			shadowHolder.Visible = state
+		end)
+
+		settingsTab:Section("Danger zone")
+
+		-- Красная кнопка выхода с подтверждением: [Отменить] [Выйти]
+		local rowH = IS_MOBILE and 44 or 38
+		local exitRow = Instance.new("Frame")
+		exitRow.Size = UDim2.new(1, 0, 0, rowH)
+		exitRow.BackgroundTransparency = 1
+		exitRow.Parent = settingsTab.Container
+
+		local confirming = false
+
+		local cancelBtn = Instance.new("TextButton")
+		cancelBtn.Size = UDim2.new(1, 0, 1, 0)
+		cancelBtn.Position = UDim2.new(0, 0, 0, 0)
+		cancelBtn.BackgroundColor3 = THEME.DangerColor
+		cancelBtn.Text = "Выйти"
+		cancelBtn.Font = Enum.Font.GothamBold
+		cancelBtn.TextSize = 14
+		cancelBtn.TextColor3 = THEME.TextColor
+		cancelBtn.AutoButtonColor = false
+		cancelBtn.Parent = exitRow
+
+		local cancelCorner = Instance.new("UICorner")
+		cancelCorner.CornerRadius = UDim.new(0, 8)
+		cancelCorner.Parent = cancelBtn
+
+		local confirmBtn = Instance.new("TextButton")
+		confirmBtn.Size = UDim2.new(0, 0, 1, 0)
+		confirmBtn.Position = UDim2.new(1, 0, 0, 0)
+		confirmBtn.AnchorPoint = Vector2.new(1, 0)
+		confirmBtn.BackgroundColor3 = THEME.DangerColor
+		confirmBtn.Text = ""
+		confirmBtn.Font = Enum.Font.GothamBold
+		confirmBtn.TextSize = 14
+		confirmBtn.TextColor3 = THEME.TextColor
+		confirmBtn.AutoButtonColor = false
+		confirmBtn.Visible = false
+		confirmBtn.Parent = exitRow
+
+		local confirmCorner = Instance.new("UICorner")
+		confirmCorner.CornerRadius = UDim.new(0, 8)
+		confirmCorner.Parent = confirmBtn
+
+		attachPressEffect(cancelBtn, 1.02)
+		attachPressEffect(confirmBtn, 1.02)
+
+		local function enterConfirm()
+			confirming = true
+			-- Первая кнопка укорачивается и становится "Отменить" (серая)
+			cancelBtn.Text = "Отменить"
+			createTween(cancelBtn, T_FAST, {
+				Size = UDim2.new(0.5, -3, 1, 0),
+				BackgroundColor3 = THEME.DividerColor,
+			})
+			-- Вторая появляется справа — красная "Выйти"
+			confirmBtn.Visible = true
+			confirmBtn.Text = "Выйти"
+			createTween(confirmBtn, T_FAST, { Size = UDim2.new(0.5, -3, 1, 0) })
 		end
+
+		local function exitConfirm()
+			confirming = false
+			cancelBtn.Text = "Выйти"
+			createTween(cancelBtn, T_FAST, {
+				Size = UDim2.new(1, 0, 1, 0),
+				BackgroundColor3 = THEME.DangerColor,
+			})
+			createTween(confirmBtn, T_FAST, { Size = UDim2.new(0, 0, 1, 0) }).Completed:Connect(function()
+				if not confirming then confirmBtn.Visible = false end
+			end)
+		end
+
+		cancelBtn.Activated:Connect(function()
+			if confirming then
+				exitConfirm()
+			else
+				enterConfirm()
+			end
+		end)
+
+		confirmBtn.Activated:Connect(function()
+			if confirming then
+				self:Destroy()
+			end
+		end)
 	end)
 
 	return self
 end
 
 ----------------------------------------------------
--- ВКЛАДКИ (iOS-стиль: пилюля, быстрые переходы, без индикатора)
+-- ВКЛАДКИ
 ----------------------------------------------------
 function iOSLibrary:SelectTab(name)
 	local targetTab = self.Tabs[name]
@@ -455,7 +696,6 @@ function iOSLibrary:SelectTab(name)
 		end)
 	end
 
-	-- Активная вкладка: заполненная пилюля (как iOS segmented control)
 	createTween(targetTab.Button, T_FAST, { BackgroundTransparency = 0 })
 	createTween(targetTab.Button.TextLabel, T_FAST, { TextColor3 = THEME.TextColor })
 	targetTab.Button.TextLabel.Font = Enum.Font.GothamBold
@@ -471,6 +711,9 @@ end
 function iOSLibrary:CreateTab(name)
 	local tab = setmetatable({}, TabClass)
 	tab.Name = name
+	tab.Window = self
+
+	self.TabOrder += 1
 
 	local btnH = IS_MOBILE and 40 or 34
 	local btnFrame = Instance.new("TextButton")
@@ -479,6 +722,7 @@ function iOSLibrary:CreateTab(name)
 	btnFrame.BackgroundTransparency = 1
 	btnFrame.Text = ""
 	btnFrame.AutoButtonColor = false
+	btnFrame.LayoutOrder = self.TabOrder
 	btnFrame.Parent = self.Sidebar
 
 	local btnCorner = Instance.new("UICorner")
@@ -492,11 +736,9 @@ function iOSLibrary:CreateTab(name)
 	btnLabel.Font = THEME.Font
 	btnLabel.TextSize = 13
 	btnLabel.TextColor3 = THEME.SecondaryText
-	btnLabel.TextXAlignment = Enum.TextXAlignment.Center
 	btnLabel.BackgroundTransparency = 1
 	btnLabel.Parent = btnFrame
 
-	-- Эффект нажатия: увеличение на пару пикселей и пружина обратно
 	attachPressEffect(btnFrame, 1.05)
 
 	local canvasGroup = Instance.new("CanvasGroup")
@@ -512,7 +754,7 @@ function iOSLibrary:CreateTab(name)
 	container.BorderSizePixel = 0
 	container.ScrollBarThickness = 0
 	container.ScrollingDirection = Enum.ScrollingDirection.Y
-	container.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable -- iOS-скролл
+	container.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
 	container.CanvasSize = UDim2.new(0, 0, 0, 0)
 	container.Parent = canvasGroup
 
@@ -528,6 +770,7 @@ function iOSLibrary:CreateTab(name)
 	tab.Button = btnFrame
 	tab.CanvasGroup = canvasGroup
 	tab.Container = container
+	tab._lastRow = nil
 
 	btnFrame.Activated:Connect(function()
 		self:SelectTab(name)
@@ -542,106 +785,59 @@ function iOSLibrary:CreateTab(name)
 	return tab
 end
 
-----------------------------------------------------
--- СТРОКИ (МУЛЬТИ-КОЛОНКИ)
-----------------------------------------------------
-function TabClass:CreateRow()
-	local row = setmetatable({}, RowClass)
-
-	local rowFrame = Instance.new("Frame")
-	rowFrame.Size = UDim2.new(1, 0, 0, IS_MOBILE and 42 or 36)
-	rowFrame.BackgroundTransparency = 1
-	rowFrame.Parent = self.Container
-
-	local rowLayout = Instance.new("UIListLayout")
-	rowLayout.FillDirection = Enum.FillDirection.Horizontal
-	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rowLayout.Padding = UDim.new(0, 6)
-	rowLayout.Parent = rowFrame
-
-	row.Container = rowFrame
-	row.ParentContainer = self.Container
-	return row
-end
-
-local function buildToggleHalf(parent, label, default, callback)
-	local state = default
-	local item = Instance.new("TextButton")
-	item.Size = UDim2.new(0.5, -3, 1, 0)
-	item.BackgroundColor3 = THEME.ContainerColor
-	item.Text = ""
-	item.AutoButtonColor = false
-	item.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = item
-
-	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.new(1, -45, 1, 0)
-	textLabel.Position = UDim2.new(0, 12, 0, 0)
-	textLabel.Text = label
-	textLabel.Font = THEME.Font
-	textLabel.TextSize = 13
-	textLabel.TextColor3 = THEME.TextColor
-	textLabel.TextXAlignment = Enum.TextXAlignment.Left
-	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	textLabel.BackgroundTransparency = 1
-	textLabel.Parent = item
-
-	local switchBg, thumb = makeSwitch(item, UDim2.new(0, 34, 0, 20), -42, state)
-	attachPressEffect(item, 1.02)
-
-	item.Activated:Connect(function()
-		state = not state
-		createTween(switchBg, T_FAST, { BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor })
-		createTween(thumb, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
-		})
-		task.spawn(callback, state)
-	end)
-end
-
-function RowClass:Toggle(label, default, callback)
-	buildToggleHalf(self.Container, label, default, callback)
-end
-
-function RowClass:Button(text, callback)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.5, -3, 1, 0)
-	btn.BackgroundColor3 = THEME.DividerColor
-	btn.Text = ""
-	btn.AutoButtonColor = false
-	btn.Parent = self.Container
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = btn
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.Text = text
-	label.Font = THEME.Font
-	label.TextSize = 13
-	label.TextColor3 = THEME.TextColor
-	label.BackgroundTransparency = 1
-	label.Parent = btn
-
-	attachPressEffect(btn, 1.03)
-
-	btn.Activated:Connect(function()
-		createTween(btn, T_PRESS, { BackgroundColor3 = THEME.ContainerColor })
-		task.spawn(callback)
-		task.delay(0.1, function()
-			createTween(btn, T_FAST, { BackgroundColor3 = THEME.DividerColor })
-		end)
-	end)
+-- Скрыть/показать вкладку (для кастомных вкладок)
+function TabClass:SetVisible(visible)
+	self.Button.Visible = visible
 end
 
 ----------------------------------------------------
--- СТАНДАРТНЫЕ ЭЛЕМЕНТЫ ВКЛАДКИ
+-- РАСКЛАДКА В СТИЛЕ IMGUI (opts вместо позиционных аргументов)
+--
+-- Каждый элемент принимает последним аргументом НЕОБЯЗАТЕЛЬНУЮ таблицу opts:
+--   { Width = 0.5 }               -- ширина элемента (доля строки, 0..1)
+--   { Width = 0.33, Inline = true } -- прилепить к предыдущему элементу в той же строке
+--   { Height = 50 }               -- своя высота
+-- Без opts элемент занимает всю строку, как обычно.
+--
+-- Пример:
+--   tab:Toggle("Fly", false, cb, { Width = 0.5 })
+--   tab:Button("Reset", cb, { Width = 0.5, Inline = true })
+----------------------------------------------------
+local function resolveLayout(tab, defaultHeight, opts)
+	opts = opts or {}
+	local height = opts.Height or defaultHeight
+	local width = opts.Width
+
+	if width and width < 1 then
+		local row
+		if opts.Inline and tab._lastRow then
+			row = tab._lastRow
+		else
+			row = Instance.new("Frame")
+			row.Size = UDim2.new(1, 0, 0, height)
+			row.BackgroundTransparency = 1
+			row.Parent = tab.Container
+
+			local rowLayout = Instance.new("UIListLayout")
+			rowLayout.FillDirection = Enum.FillDirection.Horizontal
+			rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			rowLayout.Padding = UDim.new(0, 6)
+			rowLayout.Parent = row
+
+			tab._lastRow = row
+		end
+		return row, UDim2.new(width, -4, 1, 0)
+	else
+		tab._lastRow = nil
+		return tab.Container, UDim2.new(1, 0, 0, height)
+	end
+end
+
+----------------------------------------------------
+-- ЭЛЕМЕНТЫ
 ----------------------------------------------------
 function TabClass:Section(text)
+	self._lastRow = nil
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 24)
 	label.Text = string.upper(text)
@@ -658,12 +854,13 @@ function TabClass:Section(text)
 	pad.Parent = label
 end
 
-function TabClass:Label(text)
+function TabClass:Label(text, opts)
+	local parent, size = resolveLayout(self, 32, opts)
 	local item = Instance.new("Frame")
-	item.Size = UDim2.new(1, 0, 0, 32)
+	item.Size = size
 	item.BackgroundColor3 = THEME.ContainerColor
 	item.BackgroundTransparency = 0.5
-	item.Parent = self.Container
+	item.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -682,79 +879,71 @@ function TabClass:Label(text)
 	label.Parent = item
 end
 
-function TabClass:Toggle(label, default, callback)
+function TabClass:Toggle(label, default, callback, opts)
 	local state = default
-	local itemH = IS_MOBILE and 46 or 40
+	local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
+	local compact = (opts and opts.Width and opts.Width <= 0.5)
+
 	local itemFrame = Instance.new("TextButton")
-	itemFrame.Size = UDim2.new(1, 0, 0, itemH)
+	itemFrame.Size = size
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
 	itemFrame.Text = ""
 	itemFrame.AutoButtonColor = false
-	itemFrame.Parent = self.Container
+	itemFrame.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = itemFrame
 
+	local switchW = compact and 34 or 38
+	local switchH = compact and 20 or 22
+
 	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.new(1, -65, 1, 0)
+	textLabel.Size = UDim2.new(1, -(switchW + 28), 1, 0)
 	textLabel.Position = UDim2.new(0, 12, 0, 0)
 	textLabel.Text = label
 	textLabel.Font = THEME.Font
-	textLabel.TextSize = 14
+	textLabel.TextSize = compact and 13 or 14
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
 	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = itemFrame
 
-	local switchBg, thumb = makeSwitch(itemFrame, UDim2.new(0, 38, 0, 22), -50, state)
+	local switchBg, thumb, thumbSize = makeSwitch(itemFrame, UDim2.new(0, switchW, 0, switchH), -(switchW + 8), state)
 	attachPressEffect(itemFrame, 1.02)
 
 	itemFrame.Activated:Connect(function()
 		state = not state
 		createTween(switchBg, T_FAST, { BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor })
 		createTween(thumb, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+			Position = state and UDim2.new(1, -thumbSize - 2, 0.5, -thumbSize / 2) or UDim2.new(0, 2, 0.5, -thumbSize / 2)
 		})
 		task.spawn(callback, state)
 	end)
 end
 
-function TabClass:DualToggle(label1, default1, callback1, label2, default2, callback2)
-	local rowFrame = Instance.new("Frame")
-	rowFrame.Size = UDim2.new(1, 0, 0, IS_MOBILE and 46 or 40)
-	rowFrame.BackgroundTransparency = 1
-	rowFrame.Parent = self.Container
-
-	local rowLayout = Instance.new("UIListLayout")
-	rowLayout.FillDirection = Enum.FillDirection.Horizontal
-	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rowLayout.Padding = UDim.new(0, 6)
-	rowLayout.Parent = rowFrame
-
-	buildToggleHalf(rowFrame, label1, default1, callback1)
-	buildToggleHalf(rowFrame, label2, default2, callback2)
-end
-
-function TabClass:Button(text, callback)
+function TabClass:Button(text, callback, opts)
+	local parent, size = resolveLayout(self, IS_MOBILE and 44 or 38, opts)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, 0, 0, IS_MOBILE and 44 or 38)
+	btn.Size = size
 	btn.BackgroundColor3 = THEME.DividerColor
 	btn.Text = ""
 	btn.AutoButtonColor = false
-	btn.Parent = self.Container
+	btn.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = btn
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
+	label.Size = UDim2.new(1, -8, 1, 0)
+	label.Position = UDim2.new(0, 4, 0, 0)
 	label.Text = text
 	label.Font = THEME.Font
-	label.TextSize = 14
+	label.TextSize = 13
 	label.TextColor3 = THEME.TextColor
+	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.BackgroundTransparency = 1
 	label.Parent = btn
 
@@ -765,18 +954,16 @@ function TabClass:Button(text, callback)
 	end)
 end
 
-----------------------------------------------------
--- СЛАЙДЕР с умным тачем:
--- горизонтальный свайп = слайдер, вертикальный = скролл
-----------------------------------------------------
-function TabClass:Slider(label, min, max, default, callback)
+function TabClass:Slider(label, min, max, default, callback, opts)
 	local currentVal = math.clamp(default, min, max)
 	local itemH = IS_MOBILE and 58 or 52
+	local parent, size = resolveLayout(self, itemH, opts)
+
 	local itemFrame = Instance.new("Frame")
-	itemFrame.Size = UDim2.new(1, 0, 0, itemH)
+	itemFrame.Size = size
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
 	itemFrame.Active = true
-	itemFrame.Parent = self.Container
+	itemFrame.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -790,6 +977,7 @@ function TabClass:Slider(label, min, max, default, callback)
 	textLabel.TextSize = 13
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
+	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = itemFrame
 
@@ -806,7 +994,7 @@ function TabClass:Slider(label, min, max, default, callback)
 
 	local sliderTrack = Instance.new("Frame")
 	sliderTrack.Size = UDim2.new(1, -24, 0, IS_MOBILE and 6 or 4)
-	sliderTrack.Position = UDim2.new(0, 12, 0, itemH - 18)
+	sliderTrack.Position = UDim2.new(0, 12, 1, -18)
 	sliderTrack.BackgroundColor3 = THEME.DividerColor
 	sliderTrack.BorderSizePixel = 0
 	sliderTrack.Parent = itemFrame
@@ -860,7 +1048,6 @@ function TabClass:Slider(label, min, max, default, callback)
 		local capturing = false
 		local dead = false
 
-		-- Если тап прямо по зоне трека — начинаем сразу
 		local trackY = sliderTrack.AbsolutePosition.Y + sliderTrack.AbsoluteSize.Y / 2
 		if math.abs(input.Position.Y - trackY) <= (IS_MOBILE and 22 or 14) then
 			capturing = true
@@ -878,14 +1065,13 @@ function TabClass:Slider(label, min, max, default, callback)
 				updateSlider(changed.Position.X)
 			elseif not dead then
 				local delta = changed.Position - startPos
-				-- Определяем намерение: горизонталь = слайдер, вертикаль = скролл
 				if math.abs(delta.X) > 8 and math.abs(delta.X) > math.abs(delta.Y) then
 					capturing = true
 					container.ScrollingEnabled = false
 					createTween(knobScale, T_PRESS, { Scale = 1.25 })
 					updateSlider(changed.Position.X)
 				elseif math.abs(delta.Y) > 10 then
-					dead = true -- пользователь скроллит, не мешаем
+					dead = true
 				end
 			end
 		end)
@@ -901,18 +1087,21 @@ function TabClass:Slider(label, min, max, default, callback)
 end
 
 ----------------------------------------------------
--- DROPDOWN (новое)
+-- DROPDOWN без ClipsDescendants (не глючит со скруглением):
+-- опции просто скрыты через Visible, фрейм меняет высоту
 ----------------------------------------------------
-function TabClass:Dropdown(label, options, default, callback)
+function TabClass:Dropdown(label, options, default, callback, opts)
 	local currentOption = default or options[1]
 	local expanded = false
 	local baseH = IS_MOBILE and 44 or 40
 	local optH = IS_MOBILE and 38 or 32
+	local expandedH = baseH + #options * (optH + 4) + 8
+
+	self._lastRow = nil -- дропдаун всегда на всю строку
 
 	local itemFrame = Instance.new("Frame")
 	itemFrame.Size = UDim2.new(1, 0, 0, baseH)
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
-	itemFrame.ClipsDescendants = true
 	itemFrame.Parent = self.Container
 
 	local corner = Instance.new("UICorner")
@@ -927,19 +1116,20 @@ function TabClass:Dropdown(label, options, default, callback)
 	headerBtn.Parent = itemFrame
 
 	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.new(0.5, -10, 1, 0)
+	textLabel.Size = UDim2.new(0.45, -10, 1, 0)
 	textLabel.Position = UDim2.new(0, 12, 0, 0)
 	textLabel.Text = label
 	textLabel.Font = THEME.Font
 	textLabel.TextSize = 14
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
+	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = headerBtn
 
 	local valueLabel = Instance.new("TextLabel")
-	valueLabel.Size = UDim2.new(0.5, -34, 1, 0)
-	valueLabel.Position = UDim2.new(0.5, 0, 0, 0)
+	valueLabel.Size = UDim2.new(0.55, -44, 1, 0)
+	valueLabel.Position = UDim2.new(0.45, 0, 0, 0)
 	valueLabel.Text = currentOption
 	valueLabel.Font = THEME.Font
 	valueLabel.TextSize = 13
@@ -949,21 +1139,20 @@ function TabClass:Dropdown(label, options, default, callback)
 	valueLabel.BackgroundTransparency = 1
 	valueLabel.Parent = headerBtn
 
-	local arrow = Instance.new("TextLabel")
-	arrow.Size = UDim2.new(0, 20, 1, 0)
-	arrow.Position = UDim2.new(1, -28, 0, 0)
-	arrow.Text = "›"
-	arrow.Font = Enum.Font.GothamBold
-	arrow.TextSize = 16
-	arrow.TextColor3 = THEME.SecondaryText
-	arrow.Rotation = 90
-	arrow.BackgroundTransparency = 1
-	arrow.Parent = headerBtn
+	-- Стрелка нарисована фреймами (галочка вниз)
+	local arrowHolder = Instance.new("Frame")
+	arrowHolder.Size = UDim2.new(0, 24, 0, 24)
+	arrowHolder.Position = UDim2.new(1, -34, 0.5, -12)
+	arrowHolder.BackgroundTransparency = 1
+	arrowHolder.Parent = headerBtn
+	local chevron = drawChevron(arrowHolder, 14, THEME.SecondaryText)
+	chevron.Position = UDim2.new(0.5, 0, 0.5, 0)
 
 	local optionsHolder = Instance.new("Frame")
 	optionsHolder.Size = UDim2.new(1, -16, 0, #options * (optH + 4))
 	optionsHolder.Position = UDim2.new(0, 8, 0, baseH)
 	optionsHolder.BackgroundTransparency = 1
+	optionsHolder.Visible = false
 	optionsHolder.Parent = itemFrame
 
 	local optLayout = Instance.new("UIListLayout")
@@ -973,11 +1162,22 @@ function TabClass:Dropdown(label, options, default, callback)
 
 	local function setExpanded(open)
 		expanded = open
-		local targetH = open and (baseH + #options * (optH + 4) + 8) or baseH
-		createTween(itemFrame, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(1, 0, 0, targetH)
-		})
-		createTween(arrow, T_FAST, { Rotation = open and 270 or 90 })
+		createTween(chevron, T_FAST, { Rotation = open and 180 or 0 })
+		if open then
+			itemFrame.Size = UDim2.new(1, 0, 0, expandedH)
+			optionsHolder.Visible = true
+			-- Быстрый fade-in опций
+			for _, child in ipairs(optionsHolder:GetChildren()) do
+				if child:IsA("TextButton") then
+					child.BackgroundTransparency = 1
+					child.TextTransparency = 1
+					createTween(child, T_FAST, { BackgroundTransparency = 0, TextTransparency = 0 })
+				end
+			end
+		else
+			optionsHolder.Visible = false
+			itemFrame.Size = UDim2.new(1, 0, 0, baseH)
+		end
 	end
 
 	for _, option in ipairs(options) do
@@ -1016,15 +1216,12 @@ function TabClass:Dropdown(label, options, default, callback)
 	end)
 end
 
-----------------------------------------------------
--- INPUT / VARIABLE BTN
-----------------------------------------------------
-function TabClass:Input(label, inputType, default, callback)
-	local itemH = IS_MOBILE and 46 or 40
+function TabClass:Input(label, inputType, default, callback, opts)
+	local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
 	local itemFrame = Instance.new("Frame")
-	itemFrame.Size = UDim2.new(1, 0, 0, itemH)
+	itemFrame.Size = size
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
-	itemFrame.Parent = self.Container
+	itemFrame.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -1038,6 +1235,7 @@ function TabClass:Input(label, inputType, default, callback)
 	textLabel.TextSize = 14
 	textLabel.TextColor3 = THEME.TextColor
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
+	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	textLabel.BackgroundTransparency = 1
 	textLabel.Parent = itemFrame
 
@@ -1083,12 +1281,12 @@ function TabClass:Input(label, inputType, default, callback)
 	end)
 end
 
-function TabClass:VariableBtn(label, defaultText, btnText, callback)
-	local itemH = IS_MOBILE and 46 or 40
+function TabClass:VariableBtn(label, defaultText, btnText, callback, opts)
+	local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
 	local itemFrame = Instance.new("Frame")
-	itemFrame.Size = UDim2.new(1, 0, 0, itemH)
+	itemFrame.Size = size
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
-	itemFrame.Parent = self.Container
+	itemFrame.Parent = parent
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -1140,6 +1338,7 @@ function TabClass:VariableBtn(label, defaultText, btnText, callback)
 	btnLabel.Font = THEME.Font
 	btnLabel.TextSize = 12
 	btnLabel.TextColor3 = THEME.BgColor
+	btnLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	btnLabel.BackgroundTransparency = 1
 	btnLabel.Parent = actionBtn
 
