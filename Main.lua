@@ -13,16 +13,16 @@ TabClass.__index = TabClass
 local RowClass = {}
 RowClass.__index = RowClass
 
--- Премиальный iOS 17/18 Dark Стилинг
+-- Строгий монохромный дизайн (без синего)
 local THEME = {
-	BgColor = Color3.fromRGB(0, 0, 0),             -- Чистый черный фон системы
-	ContainerColor = Color3.fromRGB(28, 28, 30),   -- Системный серый контейнер (плитки)
-	SidebarColor = Color3.fromRGB(16, 16, 18),     -- Фон сайдбара
-	AccentColor = Color3.fromRGB(10, 132, 255),    -- iOS Синий
-	ToggleOnColor = Color3.fromRGB(48, 209, 88),   -- iOS Зеленый
-	TextColor = Color3.fromRGB(255, 255, 255),     -- Основной текст
-	SecondaryText = Color3.fromRGB(142, 142, 147), -- Второстепенный текст
-	DividerColor = Color3.fromRGB(44, 44, 46),     -- Разделители
+	BgColor = Color3.fromRGB(0, 0, 0),
+	ContainerColor = Color3.fromRGB(28, 28, 30),
+	SidebarColor = Color3.fromRGB(16, 16, 18),
+	AccentColor = Color3.fromRGB(255, 255, 255),    -- Белый акцент вместо синего
+	ToggleOnColor = Color3.fromRGB(48, 209, 88),   -- iOS Зеленый (оставляем для тогглов)
+	TextColor = Color3.fromRGB(255, 255, 255),
+	SecondaryText = Color3.fromRGB(142, 142, 147),
+	DividerColor = Color3.fromRGB(44, 44, 46),
 	Font = Enum.Font.Gotham,
 }
 
@@ -32,6 +32,7 @@ local function createTween(obj, info, properties)
 	return tween
 end
 
+-- Используем ТОЛЬКО для главных панелей, чтобы не ломать скролл на мобилках
 local function preventClickThrough(instance)
 	instance.Active = true
 end
@@ -101,6 +102,7 @@ function iOSLibrary.CreateWindow(title, size)
 	header.BackgroundColor3 = THEME.ContainerColor
 	header.BorderSizePixel = 0
 	header.Parent = mainFrame
+	preventClickThrough(header)
 
 	local headerCorner = Instance.new("UICorner")
 	headerCorner.CornerRadius = UDim.new(0, 12)
@@ -137,6 +139,7 @@ function iOSLibrary.CreateWindow(title, size)
 	sidebar.BackgroundColor3 = THEME.SidebarColor
 	sidebar.BorderSizePixel = 0
 	sidebar.Parent = mainFrame
+	preventClickThrough(sidebar)
 
 	local sidebarMask = Instance.new("Frame")
 	sidebarMask.Size = UDim2.new(0, 12, 0, 12)
@@ -146,7 +149,7 @@ function iOSLibrary.CreateWindow(title, size)
 	sidebarMask.Parent = sidebar
 
 	local sidebarLayout = Instance.new("UIListLayout")
-	sidebarLayout.Padding = UDim.new(0, 4) -- Чуть увеличили паддинг под динамический размер вкладок
+	sidebarLayout.Padding = UDim.new(0, 4)
 	sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	sidebarLayout.VerticalAlignment = Enum.VerticalAlignment.Top
@@ -168,20 +171,27 @@ function iOSLibrary.CreateWindow(title, size)
 	self.Tabs = {}
 	self.CurrentTab = nil
 
-	local dragging, dragInput, dragStart, startPos
+	-- Умный обработчик шапки: Тап закрывает, Драг перетаскивает
+	local dragging, dragStart, startPos, tapTime, tapPos
+	
 	header.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
 			startPos = mainFrame.Position
-			
-			local connection
-			connection = input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-					connection:Disconnect()
-				end
-			end)
+			tapTime = os.clock()
+			tapPos = input.Position
+		end
+	end)
+
+	header.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+			local dist = (input.Position - tapPos).Magnitude
+			-- Если время удержания меньше 0.25с и палец не сдвинулся больше чем на 10 пикселей - это быстрый тап
+			if (os.clock() - tapTime) < 0.25 and dist < 10 then
+				mainFrame.Visible = false
+			end
 		end
 	end)
 
@@ -192,12 +202,7 @@ function iOSLibrary.CreateWindow(title, size)
 		end
 	end)
 
-	titleLabel.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			mainFrame.Visible = false
-		end
-	end)
-
+	-- Триггер появления меню
 	local lastTapTime = 0
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if mainFrame.Visible then return end
@@ -221,7 +226,6 @@ function iOSLibrary.CreateWindow(title, size)
 	return self
 end
 
--- СУПЕР СКОРОСТНАЯ И ПЛАВНАЯ АНИМАЦИЯ ПЕРЕКЛЮЧЕНИЯ
 function iOSLibrary:SelectTab(name)
 	local targetTab = self.Tabs[name]
 	if not targetTab or self.CurrentTab == targetTab then return end
@@ -230,7 +234,6 @@ function iOSLibrary:SelectTab(name)
 	self.CurrentTab = targetTab
 
 	if oldTab then
-		-- Старая вкладка плавно сжимается обратно до стандарта
 		createTween(oldTab.Button, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Size = UDim2.new(0, 112, 0, 34),
 			BackgroundColor3 = Color3.fromRGB(0, 0, 0), 
@@ -238,7 +241,6 @@ function iOSLibrary:SelectTab(name)
 		})
 		createTween(oldTab.Button:FindFirstChild("TextLabel"), TweenInfo.new(0.15), {TextColor3 = THEME.SecondaryText, Font = Enum.Font.Gotham})
 		
-		-- Контент старой вкладки улетает наверх и тухнет
 		createTween(oldTab.CanvasGroup, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 			GroupTransparency = 1,
 			Position = UDim2.new(0, 0, 0, -8)
@@ -247,7 +249,6 @@ function iOSLibrary:SelectTab(name)
 		end)
 	end
 
-	-- Новая вкладка эффектно увеличивается на пару пикселей (iOS Эластичность)
 	createTween(targetTab.Button, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Size = UDim2.new(0, 116, 0, 36),
 		BackgroundColor3 = THEME.ContainerColor,
@@ -255,7 +256,6 @@ function iOSLibrary:SelectTab(name)
 	})
 	createTween(targetTab.Button:FindFirstChild("TextLabel"), TweenInfo.new(0.15), {TextColor3 = THEME.TextColor, Font = Enum.Font.GothamBold})
 
-	-- Контент новой вкладки резко вылетает снизу вверх с фейдом
 	targetTab.CanvasGroup.Position = UDim2.new(0, 0, 0, 8)
 	targetTab.CanvasGroup.Visible = true
 	createTween(targetTab.CanvasGroup, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -268,12 +268,14 @@ function iOSLibrary:CreateTab(name)
 	local tab = setmetatable({}, TabClass)
 	tab.Name = name
 
-	local btnFrame = Instance.new("Frame")
+	-- Используем TextButton для идеальной отработки тапов
+	local btnFrame = Instance.new("TextButton")
 	btnFrame.Size = UDim2.new(0, 112, 0, 34)
 	btnFrame.BackgroundTransparency = 1
 	btnFrame.BackgroundColor3 = THEME.ContainerColor
+	btnFrame.Text = ""
+	btnFrame.AutoButtonColor = false
 	btnFrame.Parent = self.Sidebar
-	preventClickThrough(btnFrame)
 
 	local btnCorner = Instance.new("UICorner")
 	btnCorner.CornerRadius = UDim.new(0, 8)
@@ -287,7 +289,7 @@ function iOSLibrary:CreateTab(name)
 	btnLabel.Font = THEME.Font
 	btnLabel.TextSize = 13
 	btnLabel.TextColor3 = THEME.SecondaryText
-	btnLabel.TextXAlignment = Enum.TextXAlignment.Center -- Текст по центру смотрится аккуратнее при расширении
+	btnLabel.TextXAlignment = Enum.TextXAlignment.Center
 	btnLabel.BackgroundTransparency = 1
 	btnLabel.Parent = btnFrame
 
@@ -319,10 +321,9 @@ function iOSLibrary:CreateTab(name)
 	tab.CanvasGroup = canvasGroup
 	tab.Container = container
 
-	btnFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			self:SelectTab(name)
-		end
+	-- Нативная обработка кликов (работает 100% на мобилках)
+	btnFrame.Activated:Connect(function()
+		self:SelectTab(name)
 	end)
 
 	if not self.CurrentTab then
@@ -356,11 +357,12 @@ end
 
 function RowClass:Toggle(label, default, callback)
 	local state = default
-	local item = Instance.new("Frame")
+	local item = Instance.new("TextButton")
 	item.Size = UDim2.new(0.5, -3, 1, 0)
 	item.BackgroundColor3 = THEME.ContainerColor
+	item.Text = ""
+	item.AutoButtonColor = false
 	item.Parent = self.Container
-	preventClickThrough(item)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -380,22 +382,21 @@ function RowClass:Toggle(label, default, callback)
 
 	local switchBg, thumb = makeSwitch(item, UDim2.new(0, 34, 0, 20), -42, state)
 
-	item.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			state = not state
-			createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
-			createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)})
-			task.spawn(callback, state)
-		end
+	item.Activated:Connect(function()
+		state = not state
+		createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
+		createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)})
+		task.spawn(callback, state)
 	end)
 end
 
 function RowClass:Button(text, callback)
-	local btn = Instance.new("Frame")
+	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0.5, -3, 1, 0)
 	btn.BackgroundColor3 = THEME.DividerColor
+	btn.Text = ""
+	btn.AutoButtonColor = false
 	btn.Parent = self.Container
-	preventClickThrough(btn)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -410,27 +411,25 @@ function RowClass:Button(text, callback)
 	label.BackgroundTransparency = 1
 	label.Parent = btn
 
-	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			createTween(btn, TweenInfo.new(0.1), {BackgroundColor3 = THEME.ContainerColor})
-			task.spawn(callback)
-			task.wait(0.1)
-			createTween(btn, TweenInfo.new(0.1), {BackgroundColor3 = THEME.DividerColor})
-		end
+	btn.Activated:Connect(function()
+		createTween(btn, TweenInfo.new(0.1), {BackgroundColor3 = THEME.ContainerColor})
+		task.spawn(callback)
+		task.wait(0.1)
+		createTween(btn, TweenInfo.new(0.1), {BackgroundColor3 = THEME.DividerColor})
 	end)
 end
 
 ----------------------------------------------------
 -- СТАНДАРТНЫЕ ЭЛЕМЕНТЫ ВКЛАДКИ
 ----------------------------------------------------
-
 function TabClass:Toggle(label, default, callback)
 	local state = default
-	local itemFrame = Instance.new("Frame")
+	local itemFrame = Instance.new("TextButton")
 	itemFrame.Size = UDim2.new(1, 0, 0, 40)
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
+	itemFrame.Text = ""
+	itemFrame.AutoButtonColor = false
 	itemFrame.Parent = self.Container
-	preventClickThrough(itemFrame)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -449,13 +448,11 @@ function TabClass:Toggle(label, default, callback)
 
 	local switchBg, thumb = makeSwitch(itemFrame, UDim2.new(0, 38, 0, 22), -50, state)
 
-	itemFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			state = not state
-			createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
-			createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)})
-			task.spawn(callback, state)
-		end
+	itemFrame.Activated:Connect(function()
+		state = not state
+		createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
+		createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)})
+		task.spawn(callback, state)
 	end)
 end
 
@@ -473,11 +470,12 @@ function TabClass:DualToggle(label1, default1, callback1, label2, default2, call
 
 	local function buildHalf(label, default, callback)
 		local state = default
-		local half = Instance.new("Frame")
+		local half = Instance.new("TextButton")
 		half.Size = UDim2.new(0.5, -3, 1, 0)
 		half.BackgroundColor3 = THEME.ContainerColor
+		half.Text = ""
+		half.AutoButtonColor = false
 		half.Parent = rowFrame
-		preventClickThrough(half)
 
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 8)
@@ -497,13 +495,11 @@ function TabClass:DualToggle(label1, default1, callback1, label2, default2, call
 
 		local switchBg, thumb = makeSwitch(half, UDim2.new(0, 34, 0, 20), -42, state)
 
-		half.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				state = not state
-				createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
-				createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)})
-				task.spawn(callback, state)
-			end
+		half.Activated:Connect(function()
+			state = not state
+			createTween(switchBg, TweenInfo.new(0.15), {BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor})
+			createTween(thumb, TweenInfo.new(0.15), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)})
+			task.spawn(callback, state)
 		end)
 	end
 
@@ -517,7 +513,6 @@ function TabClass:Slider(label, min, max, default, callback)
 	itemFrame.Size = UDim2.new(1, 0, 0, 52)
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
 	itemFrame.Parent = self.Container
-	preventClickThrough(itemFrame)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -596,16 +591,14 @@ function TabClass:Slider(label, min, max, default, callback)
 			activeInput = input
 			self.Container.ScrollingEnabled = false 
 			updateSlider(input)
-			
-			local connection
-			connection = input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					isDragging = false
-					activeInput = nil
-					self.Container.ScrollingEnabled = true 
-					connection:Disconnect()
-				end
-			end)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input == activeInput then
+			isDragging = false
+			activeInput = nil
+			self.Container.ScrollingEnabled = true 
 		end
 	end)
 
@@ -621,7 +614,6 @@ function TabClass:Input(label, inputType, default, callback)
 	itemFrame.Size = UDim2.new(1, 0, 0, 40)
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
 	itemFrame.Parent = self.Container
-	preventClickThrough(itemFrame)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -674,7 +666,6 @@ function TabClass:VariableBtn(label, defaultText, btnText, callback)
 	itemFrame.Size = UDim2.new(1, 0, 0, 40)
 	itemFrame.BackgroundColor3 = THEME.ContainerColor
 	itemFrame.Parent = self.Container
-	preventClickThrough(itemFrame)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
@@ -706,12 +697,13 @@ function TabClass:VariableBtn(label, defaultText, btnText, callback)
 	boxCorner.CornerRadius = UDim.new(0, 6)
 	boxCorner.Parent = inputBox
 
-	local actionBtn = Instance.new("Frame")
+	local actionBtn = Instance.new("TextButton")
 	actionBtn.Size = UDim2.new(0.25, -12, 0, 26)
 	actionBtn.Position = UDim2.new(0.75, 0, 0.5, -13)
 	actionBtn.BackgroundColor3 = THEME.AccentColor
+	actionBtn.Text = ""
+	actionBtn.AutoButtonColor = false
 	actionBtn.Parent = itemFrame
-	preventClickThrough(actionBtn)
 
 	local btnCorner = Instance.new("UICorner")
 	btnCorner.CornerRadius = UDim.new(0, 6)
@@ -722,17 +714,15 @@ function TabClass:VariableBtn(label, defaultText, btnText, callback)
 	btnLabel.Text = btnText
 	btnLabel.Font = THEME.Font
 	btnLabel.TextSize = 12
-	btnLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnLabel.TextColor3 = THEME.BgColor -- Черный текст на белой кнопке для контраста
 	btnLabel.BackgroundTransparency = 1
 	btnLabel.Parent = actionBtn
 
-	actionBtn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			createTween(actionBtn, TweenInfo.new(0.1), {BackgroundTransparency = 0.4})
-			task.spawn(callback, inputBox.Text)
-			task.wait(0.1)
-			createTween(actionBtn, TweenInfo.new(0.1), {BackgroundTransparency = 0})
-		end
+	actionBtn.Activated:Connect(function()
+		createTween(actionBtn, TweenInfo.new(0.1), {BackgroundTransparency = 0.4})
+		task.spawn(callback, inputBox.Text)
+		task.wait(0.1)
+		createTween(actionBtn, TweenInfo.new(0.1), {BackgroundTransparency = 0})
 	end)
 end
 
