@@ -1,0 +1,2929 @@
+--[[
+    ┌─────────────────────────────────────────┐
+    │  iOS Library v4.0 — Reforged Edition    │
+    │  Full Protection · Wave Animations      │
+    │  Anti-DEX · Anti-Spy · Bezier Engine    │
+    └─────────────────────────────────────────┘
+]]
+
+-- ============================================================
+-- SECTION 0: CACHED NATIVES (до любых хуков)
+-- ============================================================
+local _type = type
+local _typeof = typeof
+local _pcall = pcall
+local _pairs = pairs
+local _ipairs = ipairs
+local _next = next
+local _rawget = rawget
+local _rawset = rawset
+local _tostring = tostring
+local _tonumber = tonumber
+local _setmetatable = setmetatable
+local _getmetatable = getmetatable
+local _select = select
+local _unpack = table.unpack or unpack
+local _tinsert = table.insert
+local _tremove = table.remove
+local _tclear = table.clear
+local _tclone = table.clone
+local _tfind = table.find
+local _tconcat = table.concat
+local _tsort = table.sort
+local _mfloor = math.floor
+local _mceil = math.ceil
+local _mclamp = math.clamp
+local _mabs = math.abs
+local _msin = math.sin
+local _mcos = math.cos
+local _mpi = math.pi
+local _mrand = math.random
+local _mmax = math.max
+local _mmin = math.min
+local _mrad = math.rad
+local _sformat = string.format
+local _ssub = string.sub
+local _sbyte = string.byte
+local _schar = string.char
+local _slen = string.len
+local _sfind = string.find
+local _smatch = string.match
+local _sgmatch = string.gmatch
+local _sgsub = string.gsub
+local _slower = string.lower
+local _supper = string.upper
+local _srep = string.rep
+local _tick = tick
+local _wait = task.wait
+local _spawn = task.spawn
+local _defer = task.defer
+local _delay = task.delay
+
+-- ============================================================
+-- SECTION 1: SERVICES
+-- ============================================================
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ============================================================
+-- SECTION 2: PROTECTION CORE
+-- ============================================================
+
+local function generateRandomName(length)
+    length = length or _mrand(14, 28)
+    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+    local result = {}
+    for i = 1, length do
+        local idx = _mrand(1, _slen(chars))
+        result[i] = _ssub(chars, idx, idx)
+    end
+    return _tconcat(result)
+end
+
+-- XOR string encryption
+local StringCrypt = {}
+do
+    local _key = generateRandomName(32)
+    function StringCrypt.encrypt(str)
+        local out = {}
+        for i = 1, _slen(str) do
+            local cb = _sbyte(str, i)
+            local kb = _sbyte(_key, ((i - 1) % _slen(_key)) + 1)
+            out[i] = _schar(bit32.bxor(cb, kb))
+        end
+        return _tconcat(out)
+    end
+    StringCrypt.decrypt = StringCrypt.encrypt
+end
+
+-- Anti-Remote Spy
+local AntiSpy = {}
+do
+    function AntiSpy.floodFakeRemotes()
+        _spawn(function()
+            for i = 1, _mrand(2, 4) do
+                _pcall(function()
+                    local fake = Instance.new("RemoteEvent")
+                    fake.Name = generateRandomName(10)
+                    fake.Parent = game:GetService("ReplicatedStorage")
+                    _delay(_mrand(1, 3), function()
+                        _pcall(function() fake:Destroy() end)
+                    end)
+                end)
+            end
+        end)
+    end
+
+    function AntiSpy.protectGC()
+        _pcall(function()
+            if _type(getgc) ~= "function" then return end
+            _spawn(function()
+                while _wait(_mrand(8, 15)) do
+                    _pcall(function()
+                        local gc = getgc(true)
+                        for _, v in gc do
+                            if _type(v) == "function" then
+                                _pcall(function()
+                                    local info = debug.info(v, "n")
+                                    if info and _sfind(info, "iOS") then
+                                        _pcall(function()
+                                            debug.setinfo(v, {name = generateRandomName(6)})
+                                        end)
+                                    end
+                                end)
+                            end
+                        end
+                    end)
+                end
+            end)
+        end)
+    end
+
+    function AntiSpy.detectHooks()
+        local suspicious = false
+        _pcall(function()
+            local testPart = Instance.new("Part")
+            local mt = _getmetatable(testPart)
+            if mt and _rawget(mt, "__namecall") then
+                local info = debug.info(mt.__namecall, "s")
+                if info and not _sfind(info, "%[C%]") then
+                    suspicious = true
+                end
+            end
+            testPart:Destroy()
+        end)
+        return suspicious
+    end
+
+    function AntiSpy.init()
+        AntiSpy.protectGC()
+        _spawn(function()
+            while _wait(12) do
+                if AntiSpy.detectHooks() then
+                    AntiSpy.floodFakeRemotes()
+                end
+            end
+        end)
+    end
+end
+
+-- Anti-DEX
+local AntiDex = {}
+do
+    local _protected = {}
+
+    function AntiDex.protect(instance)
+        if not instance then return end
+        local backup = {
+            Name = instance.Name,
+            Parent = instance.Parent,
+        }
+        _tinsert(_protected, {instance = instance, backup = backup})
+
+        local conn
+        conn = instance:GetPropertyChangedSignal("Parent"):Connect(function()
+            if not instance.Parent then
+                _defer(function()
+                    _pcall(function()
+                        instance.Parent = backup.Parent
+                        instance.Name = generateRandomName(18)
+                    end)
+                end)
+            end
+        end)
+        return conn
+    end
+
+    function AntiDex.deepEmbed(screenGui)
+        local success = false
+        _pcall(function()
+            local depth = _mrand(3, 5)
+            local current = CoreGui
+            for i = 1, depth do
+                local folder = Instance.new("Folder")
+                folder.Name = generateRandomName(20)
+                folder.Parent = current
+                AntiDex.protect(folder)
+                current = folder
+            end
+            screenGui.Parent = current
+            screenGui.Name = generateRandomName(22)
+            AntiDex.protect(screenGui)
+            success = true
+        end)
+        return success
+    end
+
+    function AntiDex.createDecoys(parent, count)
+        count = count or _mrand(4, 8)
+        local decoys = {}
+        _spawn(function()
+            for i = 1, count do
+                _pcall(function()
+                    local decoy = Instance.new("ScreenGui")
+                    decoy.Name = generateRandomName(20)
+                    decoy.Enabled = false
+                    decoy.Parent = parent or CoreGui
+                    _tinsert(decoys, decoy)
+                end)
+            end
+            -- Периодически пересоздаём
+            while _wait(_mrand(20, 40)) do
+                for idx, d in decoys do
+                    _pcall(function()
+                        d:Destroy()
+                        local newDecoy = Instance.new("ScreenGui")
+                        newDecoy.Name = generateRandomName(20)
+                        newDecoy.Enabled = false
+                        newDecoy.Parent = parent or CoreGui
+                        decoys[idx] = newDecoy
+                    end)
+                end
+            end
+        end)
+    end
+
+    function AntiDex.startNameRotation(instances)
+        _spawn(function()
+            while _wait(_mrand(15, 40)) do
+                for _, inst in instances do
+                    _pcall(function()
+                        if inst and inst.Parent then
+                            inst.Name = generateRandomName(20)
+                        end
+                    end)
+                end
+            end
+        end)
+    end
+end
+
+-- Callback obfuscator
+local function wrapCallback(fn)
+    if _type(fn) ~= "function" then return fn end
+    return function(...)
+        local ok, result = _pcall(fn, ...)
+        if ok then return result end
+    end
+end
+
+-- ============================================================
+-- SECTION 3: BEZIER ANIMATION ENGINE
+-- ============================================================
+
+local BezierEngine = {}
+do
+    local Presets = {
+        Linear       = {0, 0, 1, 1},
+        EaseIn       = {0.42, 0, 1, 1},
+        EaseOut      = {0, 0, 0.58, 1},
+        EaseInOut    = {0.42, 0, 0.58, 1},
+        EaseOutBack  = {0.175, 0.885, 0.32, 1.275},
+        EaseInBack   = {0.6, -0.28, 0.735, 0.045},
+        EaseInOutBack= {0.68, -0.55, 0.265, 1.55},
+        EaseOutCirc  = {0.075, 0.82, 0.165, 1},
+        EaseInCirc   = {0.6, 0.04, 0.98, 0.335},
+        EaseOutExpo  = {0.19, 1, 0.22, 1},
+        EaseInExpo   = {0.95, 0.05, 0.795, 0.035},
+        Bounce       = {0.175, 0.885, 0.32, 1.175},
+        Spring       = {0.155, 1.105, 0.295, 1.12},
+        Smooth       = {0.25, 0.1, 0.25, 1},
+        Snappy       = {0.17, 0.89, 0.32, 1.28},
+        iOSDefault   = {0.25, 0.1, 0.25, 1},
+        iOSSpring    = {0.2, 0.9, 0.3, 1.2},
+    }
+
+    local function cubicBezier(t, p0, p1, p2, p3)
+        local u = 1 - t
+        return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3
+    end
+
+    local function solveBezierX(x, x1, x2)
+        local t = x
+        for _ = 1, 8 do
+            local cx = cubicBezier(t, 0, x1, x2, 1) - x
+            if _mabs(cx) < 0.001 then break end
+            local d = 3*(1-t)*(1-t)*x1 + 6*(1-t)*t*(x2-x1) + 3*t*t*(1-x2)
+            if _mabs(d) < 1e-6 then break end
+            t = _mclamp(t - cx/d, 0, 1)
+        end
+        return t
+    end
+
+    function BezierEngine.curve(x1, y1, x2, y2)
+        return function(t)
+            if t <= 0 then return 0 end
+            if t >= 1 then return 1 end
+            local st = solveBezierX(t, x1, x2)
+            return cubicBezier(st, 0, y1, y2, 1)
+        end
+    end
+
+    function BezierEngine.getPreset(name)
+        local p = Presets[name] or Presets.iOSDefault
+        return BezierEngine.curve(p[1], p[2], p[3], p[4])
+    end
+
+    function BezierEngine.getPresetNames()
+        local names = {}
+        for k in Presets do _tinsert(names, k) end
+        _tsort(names)
+        return names
+    end
+
+    -- Custom tween using Bezier curves (heartbeat-driven)
+    function BezierEngine.tween(instance, properties, duration, curveName, callback)
+        duration = duration or 0.3
+        local easingFn = _type(curveName) == "function" and curveName or BezierEngine.getPreset(curveName or "iOSDefault")
+
+        local startValues = {}
+        for prop, _ in properties do
+            _pcall(function() startValues[prop] = instance[prop] end)
+        end
+
+        local startTime = _tick()
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            local elapsed = _tick() - startTime
+            local progress = _mclamp(elapsed / duration, 0, 1)
+            local eased = easingFn(progress)
+
+            for prop, target in properties do
+                local start = startValues[prop]
+                if start ~= nil then
+                    _pcall(function()
+                        local tv = _typeof(start)
+                        if tv == "number" then
+                            instance[prop] = start + (target - start) * eased
+                        elseif tv == "UDim2" then
+                            instance[prop] = start:Lerp(target, eased)
+                        elseif tv == "Color3" then
+                            instance[prop] = start:Lerp(target, eased)
+                        elseif tv == "UDim" then
+                            instance[prop] = UDim.new(
+                                start.Scale + (target.Scale - start.Scale) * eased,
+                                start.Offset + (target.Offset - start.Offset) * eased
+                            )
+                        elseif tv == "Vector2" then
+                            instance[prop] = start:Lerp(target, eased)
+                        else
+                            if progress >= 1 then instance[prop] = target end
+                        end
+                    end)
+                end
+            end
+
+            if progress >= 1 then
+                conn:Disconnect()
+                if callback then _spawn(callback) end
+            end
+        end)
+
+        return {
+            Cancel = function() conn:Disconnect() end,
+            connection = conn,
+        }
+    end
+end
+
+-- ============================================================
+-- SECTION 4: LIBRARY CORE
+-- ============================================================
+
+local iOSLibrary = {}
+iOSLibrary.__index = iOSLibrary
+
+local TabClass = {}
+TabClass.__index = TabClass
+
+local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+local CORNER_RADIUS = 14
+
+local THEME = {
+    BgColor = Color3.fromRGB(0, 0, 0),
+    ContainerColor = Color3.fromRGB(28, 28, 30),
+    SidebarColor = Color3.fromRGB(16, 16, 18),
+    AccentColor = Color3.fromRGB(255, 255, 255),
+    ToggleOnColor = Color3.fromRGB(48, 209, 88),
+    DangerColor = Color3.fromRGB(255, 69, 58),
+    TextColor = Color3.fromRGB(255, 255, 255),
+    SecondaryText = Color3.fromRGB(142, 142, 147),
+    DividerColor = Color3.fromRGB(44, 44, 46),
+    Font = Enum.Font.Gotham,
+    LineActiveColor = Color3.fromRGB(48, 209, 88),
+}
+
+local T_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local T_PRESS = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local T_RELEASE = TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+-- Current animation curve (user can change in settings)
+local currentAnimCurve = "iOSDefault"
+local animSpeedMultiplier = 1
+
+local function createTween(obj, info, properties)
+    local tween = TweenService:Create(obj, info, properties)
+    tween:Play()
+    return tween
+end
+
+local function isTouchOrMouse(input)
+    return input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function watchInputEnd(input, callback)
+    local conn
+    conn = input.Changed:Connect(function()
+        if input.UserInputState == Enum.UserInputState.End
+            or input.UserInputState == Enum.UserInputState.Cancel then
+            conn:Disconnect()
+            callback()
+        end
+    end)
+end
+
+local function attachPressEffect(btn, scaleAmount)
+    local uiScale = Instance.new("UIScale")
+    uiScale.Scale = 1
+    uiScale.Parent = btn
+    btn.InputBegan:Connect(function(input)
+        if isTouchOrMouse(input) then
+            createTween(uiScale, T_PRESS, { Scale = scaleAmount or 1.04 })
+            watchInputEnd(input, function()
+                createTween(uiScale, T_RELEASE, { Scale = 1 })
+            end)
+        end
+    end)
+    return uiScale
+end
+
+-- ============================================================
+-- SECTION 5: CACHE SYSTEM (сохраняю твою систему)
+-- ============================================================
+
+local CacheClass = {}
+CacheClass.__index = CacheClass
+
+local HAS_FS = _typeof(writefile) == "function" and _typeof(readfile) == "function" and _typeof(isfile) == "function"
+local CACHE_FOLDER = "ios_lib_cache"
+
+if HAS_FS and _typeof(makefolder) == "function" and _typeof(isfolder) == "function" then
+    _pcall(function()
+        if not isfolder(CACHE_FOLDER) then makefolder(CACHE_FOLDER) end
+    end)
+end
+
+local function serializeValue(v)
+    local t = _typeof(v)
+    if t == "Vector3" then return { __t = "v3", d = { v.X, v.Y, v.Z } }
+    elseif t == "Vector2" then return { __t = "v2", d = { v.X, v.Y } }
+    elseif t == "CFrame" then return { __t = "cf", d = { v:GetComponents() } }
+    elseif t == "Color3" then return { __t = "c3", d = { v.R, v.G, v.B } }
+    elseif t == "UDim2" then return { __t = "u2", d = { v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset } }
+    elseif t == "table" then
+        local out = { __t = "tbl", d = {} }
+        for key, val in _pairs(v) do out.d[_tostring(key)] = serializeValue(val) end
+        return out
+    else return { __t = "raw", d = v } end
+end
+
+local function deserializeValue(v)
+    if _typeof(v) ~= "table" or v.__t == nil then return v end
+    local t, d = v.__t, v.d
+    if t == "v3" then return Vector3.new(d[1], d[2], d[3])
+    elseif t == "v2" then return Vector2.new(d[1], d[2])
+    elseif t == "cf" then return CFrame.new(_unpack(d))
+    elseif t == "c3" then return Color3.new(d[1], d[2], d[3])
+    elseif t == "u2" then return UDim2.new(d[1], d[2], d[3], d[4])
+    elseif t == "tbl" then
+        local out = {}
+        for key, val in _pairs(d) do
+            local numKey = _tonumber(key)
+            out[numKey or key] = deserializeValue(val)
+        end
+        return out
+    else return d end
+end
+
+function iOSLibrary.CreateCache(name)
+    local self = _setmetatable({}, CacheClass)
+    self.Name = name
+    self.FilePath = CACHE_FOLDER .. "/" .. name .. ".json"
+    self.Data = {}
+    self._saveQueued = false
+    self:Load()
+    return self
+end
+
+function CacheClass:Load()
+    if not HAS_FS then return end
+    local ok, result = _pcall(function()
+        if isfile(self.FilePath) then
+            local raw = readfile(self.FilePath)
+            local decoded = HttpService:JSONDecode(raw)
+            local out = {}
+            for k, v in _pairs(decoded) do out[k] = deserializeValue(v) end
+            return out
+        end
+    end)
+    if ok and result then self.Data = result end
+end
+
+function CacheClass:Save()
+    if not HAS_FS then return end
+    _pcall(function()
+        local out = {}
+        for k, v in _pairs(self.Data) do out[k] = serializeValue(v) end
+        writefile(self.FilePath, HttpService:JSONEncode(out))
+    end)
+end
+
+function CacheClass:Set(key, value)
+    self.Data[key] = value
+    if not self._saveQueued then
+        self._saveQueued = true
+        _delay(0.5, function()
+            self._saveQueued = false
+            self:Save()
+        end)
+    end
+end
+
+function CacheClass:Get(key, default)
+    local v = self.Data[key]
+    if v == nil then return default end
+    return v
+end
+
+function CacheClass:Clear()
+    self.Data = {}
+    self:Save()
+end
+
+-- ============================================================
+-- SECTION 6: IMAGE LOADING (сохраняю твою систему)
+-- ============================================================
+
+local function normalizeGithubUrl(url)
+    if url:find("github%.com") and url:find("/blob/") then
+        url = url:gsub("github%.com", "raw.githubusercontent.com"):gsub("/blob/", "/")
+    end
+    return url
+end
+
+local function httpGet(url)
+    local ok, res = _pcall(function() return game:HttpGet(url) end)
+    if ok and res then return res end
+    local req = (_typeof(syn) == "table" and syn.request) or http_request or request
+    if req then
+        local ok2, res2 = _pcall(function() return req({ Url = url, Method = "GET" }) end)
+        if ok2 and res2 and res2.Body then return res2.Body end
+    end
+    return nil
+end
+
+local imageCache = {}
+local function fetchImage(url)
+    url = normalizeGithubUrl(url)
+    if imageCache[url] then return imageCache[url] end
+    if not (HAS_FS and _typeof(getcustomasset) == "function") then return nil end
+    local fileName = CACHE_FOLDER .. "/img_" .. url:gsub("[^%w]", ""):sub(-40) .. ".png"
+    local ok, asset = _pcall(function()
+        if not isfile(fileName) then
+            local data = httpGet(url)
+            if not data then error("no data") end
+            writefile(fileName, data)
+        end
+        return getcustomasset(fileName)
+    end)
+    if ok and asset then imageCache[url] = asset; return asset end
+    return nil
+end
+
+-- ============================================================
+-- SECTION 7: DRAWN ICONS (сохраняю твои)
+-- ============================================================
+
+local function drawCross(parent, size, color, thickness)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0, size, 0, size)
+    holder.AnchorPoint = Vector2.new(0.5, 0.5)
+    holder.Position = UDim2.new(0.5, 0, 0.5, 0)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+    for _, rot in _ipairs({45, -45}) do
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, 0, 0, thickness or 2)
+        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.Position = UDim2.new(0.5, 0, 0.5, 0)
+        line.Rotation = rot
+        line.BackgroundColor3 = color
+        line.BorderSizePixel = 0
+        line.Parent = holder
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(1, 0)
+        c.Parent = line
+    end
+    return holder
+end
+
+local function drawBurger(parent, size, color)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0, size, 0, size)
+    holder.AnchorPoint = Vector2.new(0.5, 0.5)
+    holder.Position = UDim2.new(0.5, 0, 0.5, 0)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+    for i = 0, 2 do
+        local line = Instance.new("Frame")
+        line.Size = UDim2.new(1, 0, 0, 2)
+        line.Position = UDim2.new(0, 0, 0, _mfloor(i * (size - 2) / 2))
+        line.BackgroundColor3 = color
+        line.BorderSizePixel = 0
+        line.Parent = holder
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(1, 0)
+        c.Parent = line
+    end
+    return holder
+end
+
+local function drawChevron(parent, size, color)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0, size, 0, size)
+    holder.AnchorPoint = Vector2.new(0.5, 0.5)
+    holder.BackgroundTransparency = 1
+    holder.Parent = parent
+    local l1 = Instance.new("Frame")
+    l1.Size = UDim2.new(0.62, 0, 0, 2)
+    l1.AnchorPoint = Vector2.new(1, 0.5)
+    l1.Position = UDim2.new(0.5, 1, 0.55, 0)
+    l1.Rotation = 45
+    l1.BackgroundColor3 = color
+    l1.BorderSizePixel = 0
+    l1.Parent = holder
+    Instance.new("UICorner", l1).CornerRadius = UDim.new(1, 0)
+    local l2 = Instance.new("Frame")
+    l2.Size = UDim2.new(0.62, 0, 0, 2)
+    l2.AnchorPoint = Vector2.new(0, 0.5)
+    l2.Position = UDim2.new(0.5, -1, 0.55, 0)
+    l2.Rotation = -45
+    l2.BackgroundColor3 = color
+    l2.BorderSizePixel = 0
+    l2.Parent = holder
+    Instance.new("UICorner", l2).CornerRadius = UDim.new(1, 0)
+    return holder
+end
+
+local function makeSwitch(parent, size, posX, state)
+    local switchBg = Instance.new("Frame")
+    switchBg.Size = size
+    switchBg.Position = UDim2.new(1, posX, 0.5, -size.Y.Offset / 2)
+    switchBg.BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor
+    switchBg.Parent = parent
+    Instance.new("UICorner", switchBg).CornerRadius = UDim.new(1, 0)
+    local thumbSize = size.Y.Offset - 4
+    local thumb = Instance.new("Frame")
+    thumb.Size = UDim2.new(0, thumbSize, 0, thumbSize)
+    thumb.Position = state and UDim2.new(1, -thumbSize - 2, 0.5, -thumbSize / 2)
+        or UDim2.new(0, 2, 0.5, -thumbSize / 2)
+    thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    thumb.Parent = switchBg
+    Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
+    return switchBg, thumb, thumbSize
+end
+
+-- ============================================================
+-- SECTION 8: WAVE ANIMATION SYSTEM
+-- ============================================================
+
+local WaveAnim = {}
+do
+    -- Wave hide: circular mask expands from a point, covering the UI
+    function WaveAnim.hide(mainFrame, windowScale, originX, originY, duration, callback)
+        duration = duration or 0.45
+
+        -- Create overlay
+        local overlay = Instance.new("Frame")
+        overlay.Name = generateRandomName(8)
+        overlay.Size = UDim2.fromScale(1, 1)
+        overlay.Position = UDim2.fromScale(0, 0)
+        overlay.BackgroundTransparency = 1
+        overlay.ClipsDescendants = true
+        overlay.ZIndex = 100
+        overlay.Parent = mainFrame
+
+        -- Expanding circle mask
+        local mask = Instance.new("Frame")
+        mask.Name = generateRandomName(8)
+        mask.BackgroundColor3 = THEME.BgColor
+        mask.BackgroundTransparency = 0
+        mask.Size = UDim2.fromOffset(0, 0)
+        mask.AnchorPoint = Vector2.new(0.5, 0.5)
+        mask.Position = UDim2.new(originX or 0.5, 0, originY or 0, 0)
+        mask.ZIndex = 101
+        mask.Parent = overlay
+
+        Instance.new("UICorner", mask).CornerRadius = UDim.new(1, 0)
+
+        -- Calculate max size needed to cover entire frame
+        local frameSize = mainFrame.AbsoluteSize
+        local maxDim = _mmax(frameSize.X, frameSize.Y) * 3
+
+        BezierEngine.tween(mask, {
+            Size = UDim2.fromOffset(maxDim, maxDim),
+        }, duration, "EaseInCirc", function()
+            mainFrame.Visible = false
+            overlay:Destroy()
+            if callback then callback() end
+        end)
+    end
+
+    -- Wave show: circle shrinks to reveal UI
+    function WaveAnim.show(mainFrame, windowScale, originX, originY, duration, callback)
+        duration = duration or 0.45
+        mainFrame.Visible = true
+
+        local overlay = Instance.new("Frame")
+        overlay.Name = generateRandomName(8)
+        overlay.Size = UDim2.fromScale(1, 1)
+        overlay.Position = UDim2.fromScale(0, 0)
+        overlay.BackgroundTransparency = 1
+        overlay.ClipsDescendants = true
+        overlay.ZIndex = 100
+        overlay.Parent = mainFrame
+
+        local frameSize = mainFrame.AbsoluteSize
+        local maxDim = _mmax(frameSize.X, frameSize.Y) * 3
+
+        local mask = Instance.new("Frame")
+        mask.Name = generateRandomName(8)
+        mask.BackgroundColor3 = THEME.BgColor
+        mask.Size = UDim2.fromOffset(maxDim, maxDim)
+        mask.AnchorPoint = Vector2.new(0.5, 0.5)
+        mask.Position = UDim2.new(originX or 0.5, 0, originY or 0, 0)
+        mask.ZIndex = 101
+        mask.Parent = overlay
+
+        Instance.new("UICorner", mask).CornerRadius = UDim.new(1, 0)
+
+        BezierEngine.tween(mask, {
+            Size = UDim2.fromOffset(0, 0),
+        }, duration, "EaseOutCirc", function()
+            overlay:Destroy()
+            if callback then callback() end
+        end)
+    end
+end
+
+-- ============================================================
+-- SECTION 9: VIEWPORT CHARACTER (FIXED — clothed avatar)
+-- ============================================================
+
+local function buildAvatar(parent, size)
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0, size, 0, size)
+    circle.BackgroundColor3 = THEME.DividerColor
+    circle.Parent = parent
+    Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
+
+    local circleStroke = Instance.new("UIStroke")
+    circleStroke.Color = THEME.DividerColor
+    circleStroke.Thickness = 1
+    circleStroke.Parent = circle
+
+    local player = LocalPlayer
+
+    local viewportOk = _pcall(function()
+        local char = player.Character
+        if not char then error("no char") end
+
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then error("no humanoid") end
+
+        -- Use HumanoidDescription for FULLY CLOTHED avatar
+        local description = humanoid:GetAppliedDescription()
+        local clone = Players:CreateHumanoidModelFromDescription(description, humanoid.RigType)
+
+        -- Remove scripts/animators/sounds
+        for _, obj in clone:GetDescendants() do
+            if obj:IsA("BaseScript") or obj:IsA("Animator")
+                or obj:IsA("Animation") or obj:IsA("Sound") then
+                obj:Destroy()
+            end
+        end
+
+        local hrp = clone:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.Anchored = true end
+
+        local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+        if cloneHum then cloneHum:Destroy() end
+
+        local vp = Instance.new("ViewportFrame")
+        vp.Size = UDim2.new(1, 0, 1, 0)
+        vp.BackgroundTransparency = 1
+        vp.Parent = circle
+        Instance.new("UICorner", vp).CornerRadius = UDim.new(1, 0)
+
+        clone.Parent = vp
+
+        local cloneHead = clone:FindFirstChild("Head")
+        local cam = Instance.new("Camera")
+        cam.Parent = vp
+        vp.CurrentCamera = cam
+
+        if cloneHead then
+            local headPos = cloneHead.Position
+            cam.CFrame = CFrame.new(headPos + cloneHead.CFrame.LookVector * 1.8, headPos)
+        elseif hrp then
+            cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 3), hrp.Position + Vector3.new(0, 1.5, 0))
+        end
+    end)
+
+    if not viewportOk then
+        local img = Instance.new("ImageLabel")
+        img.Size = UDim2.new(1, 0, 1, 0)
+        img.BackgroundTransparency = 1
+        img.Parent = circle
+        Instance.new("UICorner", img).CornerRadius = UDim.new(1, 0)
+        local thumbOk, thumb = _pcall(function()
+            return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+        end)
+        img.Image = (thumbOk and thumb)
+            or ("rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=100&h=100")
+    end
+
+    return circle
+end
+
+-- ============================================================
+-- SECTION 10: MAIN WINDOW
+-- ============================================================
+
+function iOSLibrary.CreateWindow(title, size, config)
+    local self = _setmetatable({}, iOSLibrary)
+    config = config or {}
+
+    -- HideMethod: 1 = X button + wave up
+    --             2 = Bottom line fill/drain
+    --             3 = Double-tap open + tap title hide
+    --             4 = Circle hamburger button
+    local hideMethod = config.HideMethod or 1
+
+    local settingsCache = iOSLibrary.CreateCache("ios_lib_settings")
+    self.SettingsCache = settingsCache
+
+    -- Load saved hide method
+    hideMethod = settingsCache:Get("HideMethod", hideMethod)
+
+    local camera = Workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
+    local desired = size or Vector2.new(470, 330)
+    local windowSize = Vector2.new(
+        _mmin(desired.X, viewport.X - 24),
+        _mmin(desired.Y, viewport.Y - 60)
+    )
+
+    -- Init protection
+    AntiSpy.init()
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = generateRandomName(22)
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.IgnoreGuiInset = true
+    screenGui.DisplayOrder = 2147483647
+
+    -- Parent with deep embed
+    local parented = false
+
+    -- Try deep embed first (Anti-DEX)
+    parented = AntiDex.deepEmbed(screenGui)
+
+    if not parented then
+        if _typeof(gethui) == "function" then
+            local ok = _pcall(function() screenGui.Parent = gethui() end)
+            parented = ok and screenGui.Parent ~= nil
+        end
+    end
+    if not parented and _typeof(syn) == "table" and _typeof(syn.protect_gui) == "function" then
+        local ok = _pcall(function()
+            syn.protect_gui(screenGui)
+            screenGui.Parent = CoreGui
+        end)
+        parented = ok and screenGui.Parent ~= nil
+    end
+    if not parented then
+        local ok = _pcall(function() screenGui.Parent = CoreGui end)
+        parented = ok and screenGui.Parent ~= nil
+    end
+    if not parented then
+        screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    -- Create decoys and start name rotation
+    AntiDex.createDecoys(nil, _mrand(5, 10))
+    local protectedInstances = {screenGui}
+
+    self.ScreenGui = screenGui
+
+    screenGui:GetPropertyChangedSignal("DisplayOrder"):Connect(function()
+        if screenGui.DisplayOrder ~= 2147483647 then
+            screenGui.DisplayOrder = 2147483647
+        end
+    end)
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, windowSize.X, 0, windowSize.Y)
+    mainFrame.Position = UDim2.new(0.5, -windowSize.X / 2, 0.5, -windowSize.Y / 2)
+    mainFrame.BackgroundColor3 = THEME.BgColor
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Visible = false
+    mainFrame.Active = true
+    mainFrame.ZIndex = 2
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = screenGui
+
+    local windowScale = Instance.new("UIScale")
+    windowScale.Scale = 1
+    windowScale.Parent = mainFrame
+
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, CORNER_RADIUS)
+
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = THEME.DividerColor
+    mainStroke.Thickness = 1
+    mainStroke.Parent = mainFrame
+
+    _tinsert(protectedInstances, mainFrame)
+    AntiDex.protect(mainFrame)
+
+    local headerH = IS_MOBILE and 46 or 42
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, headerH)
+    header.BackgroundColor3 = THEME.ContainerColor
+    header.BorderSizePixel = 0
+    header.Active = true
+    header.Parent = mainFrame
+
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, CORNER_RADIUS)
+
+    local headerBottomMask = Instance.new("Frame")
+    headerBottomMask.Size = UDim2.new(1, 0, 0, CORNER_RADIUS)
+    headerBottomMask.Position = UDim2.new(0, 0, 1, -CORNER_RADIUS)
+    headerBottomMask.BackgroundColor3 = THEME.ContainerColor
+    headerBottomMask.BorderSizePixel = 0
+    headerBottomMask.Parent = header
+
+    -- Avatar
+    local avatarSize = headerH - 16
+    local avatarHolder = Instance.new("Frame")
+    avatarHolder.Size = UDim2.new(0, avatarSize, 0, avatarSize)
+    avatarHolder.Position = UDim2.new(0, 10, 0.5, -avatarSize / 2)
+    avatarHolder.BackgroundTransparency = 1
+    avatarHolder.Visible = false
+    avatarHolder.Parent = header
+
+    local avatarBuilt = false
+    local function setAvatarEnabled(enabled)
+        if enabled and not avatarBuilt then
+            avatarBuilt = true
+            _spawn(buildAvatar, avatarHolder, avatarSize)
+        end
+        avatarHolder.Visible = enabled
+    end
+
+    -- Title
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.AutomaticSize = Enum.AutomaticSize.X
+    titleLabel.Size = UDim2.new(0, 0, 1, 0)
+    titleLabel.Position = UDim2.new(0, 14, 0, 0)
+    titleLabel.Text = title
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 15
+    titleLabel.TextColor3 = THEME.TextColor
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Parent = header
+
+    local function updateTitleOffset()
+        titleLabel.Position = UDim2.new(0, avatarHolder.Visible and (avatarSize + 18) or 14, 0, 0)
+    end
+    avatarHolder:GetPropertyChangedSignal("Visible"):Connect(updateTitleOffset)
+
+    -- Header line
+    local headerLine = Instance.new("Frame")
+    headerLine.Size = UDim2.new(1, 0, 0, 1)
+    headerLine.Position = UDim2.new(0, 0, 1, 0)
+    headerLine.BackgroundColor3 = THEME.DividerColor
+    headerLine.BorderSizePixel = 0
+    headerLine.Parent = header
+
+    -- ===== CLOSE BUTTON (Method 1) =====
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, headerH - 14, 0, headerH - 14)
+    closeBtn.Position = UDim2.new(1, -(headerH - 7), 0.5, -(headerH - 14) / 2)
+    closeBtn.BackgroundColor3 = THEME.DividerColor
+    closeBtn.Text = ""
+    closeBtn.AutoButtonColor = false
+    closeBtn.Visible = (hideMethod == 1)
+    closeBtn.Parent = header
+    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(1, 0)
+    drawCross(closeBtn, 12, THEME.TextColor, 2)
+    attachPressEffect(closeBtn, 1.08)
+
+    -- ===== SIDEBAR =====
+    local sidebarW = IS_MOBILE and _mmax(96, _mfloor(windowSize.X * 0.26)) or 120
+
+    local sidebarHolder = Instance.new("Frame")
+    sidebarHolder.Size = UDim2.new(0, sidebarW, 1, -(headerH + 1))
+    sidebarHolder.Position = UDim2.new(0, 0, 0, headerH + 1)
+    sidebarHolder.BackgroundColor3 = THEME.SidebarColor
+    sidebarHolder.BorderSizePixel = 0
+    sidebarHolder.Parent = mainFrame
+
+    Instance.new("UICorner", sidebarHolder).CornerRadius = UDim.new(0, CORNER_RADIUS)
+
+    local sidebarMaskTop = Instance.new("Frame")
+    sidebarMaskTop.Size = UDim2.new(1, 0, 0, CORNER_RADIUS)
+    sidebarMaskTop.BackgroundColor3 = THEME.SidebarColor
+    sidebarMaskTop.BorderSizePixel = 0
+    sidebarMaskTop.Parent = sidebarHolder
+
+    local sidebarMaskRight = Instance.new("Frame")
+    sidebarMaskRight.Size = UDim2.new(0, CORNER_RADIUS, 1, 0)
+    sidebarMaskRight.Position = UDim2.new(1, -CORNER_RADIUS, 0, 0)
+    sidebarMaskRight.BackgroundColor3 = THEME.SidebarColor
+    sidebarMaskRight.BorderSizePixel = 0
+    sidebarMaskRight.Parent = sidebarHolder
+
+    local sidebar = Instance.new("ScrollingFrame")
+    sidebar.Size = UDim2.new(1, 0, 1, -CORNER_RADIUS)
+    sidebar.BackgroundTransparency = 1
+    sidebar.BorderSizePixel = 0
+    sidebar.ScrollBarThickness = 0
+    sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+    sidebar.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+    sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sidebar.Active = true
+    sidebar.Parent = sidebarHolder
+
+    local sidebarLayout = Instance.new("UIListLayout")
+    sidebarLayout.Padding = UDim.new(0, 4)
+    sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    sidebarLayout.Parent = sidebar
+
+    local sidebarPadding = Instance.new("UIPadding")
+    sidebarPadding.PaddingTop = UDim.new(0, 8)
+    sidebarPadding.PaddingBottom = UDim.new(0, 8)
+    sidebarPadding.Parent = sidebar
+
+    -- Content
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, -(sidebarW + 6 + CORNER_RADIUS), 1, -(headerH + 7 + CORNER_RADIUS))
+    contentFrame.Position = UDim2.new(0, sidebarW + 6, 0, headerH + 7)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+
+    self.MainFrame = mainFrame
+    self.Sidebar = sidebar
+    self.SidebarWidth = sidebarW
+    self.ContentFrame = contentFrame
+    self.Tabs = {}
+    self.TabOrder = 0
+    self.CurrentTab = nil
+    self.IsOpen = false
+    self.Destroyed = false
+    self.HideMethod = hideMethod
+
+    -- ===== BOTTOM LINE (Method 2) =====
+    local bottomLine, bottomLineFill
+
+    if true then -- Always create, visibility controlled by method
+        bottomLine = Instance.new("Frame")
+        bottomLine.Size = UDim2.new(1, -20, 0, 4)
+        bottomLine.Position = UDim2.new(0, 10, 1, -8)
+        bottomLine.BackgroundColor3 = THEME.DividerColor
+        bottomLine.BorderSizePixel = 0
+        bottomLine.ClipsDescendants = true
+        bottomLine.Visible = (hideMethod == 2)
+        bottomLine.ZIndex = 10
+        bottomLine.Parent = mainFrame
+        Instance.new("UICorner", bottomLine).CornerRadius = UDim.new(1, 0)
+
+        bottomLineFill = Instance.new("Frame")
+        bottomLineFill.Size = UDim2.new(0, 0, 1, 0)
+        bottomLineFill.Position = UDim2.fromScale(0, 0)
+        bottomLineFill.BackgroundColor3 = THEME.LineActiveColor
+        bottomLineFill.BorderSizePixel = 0
+        bottomLineFill.Parent = bottomLine
+        Instance.new("UICorner", bottomLineFill).CornerRadius = UDim.new(1, 0)
+    end
+
+    -- ===== CIRCLE BUTTON (Method 4) =====
+    local circleBtn
+    do
+        local cSize = IS_MOBILE and 50 or 44
+        circleBtn = Instance.new("TextButton")
+        circleBtn.Size = UDim2.new(0, cSize, 0, cSize)
+        circleBtn.Position = UDim2.new(0, 16, 0.5, 0)
+        circleBtn.AnchorPoint = Vector2.new(0, 0.5)
+        circleBtn.BackgroundColor3 = THEME.ContainerColor
+        circleBtn.Text = ""
+        circleBtn.AutoButtonColor = false
+        circleBtn.Visible = (hideMethod == 4)
+        circleBtn.ZIndex = 15
+        circleBtn.Parent = screenGui
+        Instance.new("UICorner", circleBtn).CornerRadius = UDim.new(1, 0)
+        local cStroke = Instance.new("UIStroke")
+        cStroke.Color = THEME.DividerColor
+        cStroke.Thickness = 1
+        cStroke.Parent = circleBtn
+        drawBurger(circleBtn, 18, THEME.TextColor)
+        attachPressEffect(circleBtn, 1.1)
+        _tinsert(protectedInstances, circleBtn)
+        AntiDex.protect(circleBtn)
+
+        -- Make draggable
+        circleBtn.InputBegan:Connect(function(input)
+            if not isTouchOrMouse(input) then return end
+            local startInputPos = input.Position
+            local startBtnPos = circleBtn.Position
+            local moved = false
+            local moveConn
+            moveConn = UserInputService.InputChanged:Connect(function(changed)
+                if changed ~= input and not (input.UserInputType == Enum.UserInputType.MouseButton1 and changed.UserInputType == Enum.UserInputType.MouseMovement) then return end
+                local delta = changed.Position - startInputPos
+                if delta.Magnitude > 8 then moved = true end
+                if moved then
+                    local vp2 = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+                    local newX = _mclamp(startBtnPos.X.Offset + delta.X, 4, vp2.X - cSize - 4)
+                    local newY = _mclamp(startBtnPos.Y.Scale * vp2.Y + startBtnPos.Y.Offset + delta.Y, 4, vp2.Y - cSize - 4)
+                    circleBtn.Position = UDim2.new(0, newX, 0, newY)
+                end
+            end)
+            watchInputEnd(input, function()
+                moveConn:Disconnect()
+                if not moved then
+                    -- Toggle menu
+                    if self.IsOpen then
+                        self:SetOpen(false)
+                    else
+                        self:SetOpen(true)
+                    end
+                end
+            end)
+        end)
+    end
+
+    -- ===== BUBBLE BUTTON (Methods 1, 2, 3 — for reopening) =====
+    local bubbleSize = IS_MOBILE and 52 or 44
+    local bubble = Instance.new("TextButton")
+    bubble.Size = UDim2.new(0, bubbleSize, 0, bubbleSize)
+    bubble.Position = UDim2.new(1, -bubbleSize - 12, 0, 70)
+    bubble.BackgroundColor3 = THEME.ContainerColor
+    bubble.Text = ""
+    bubble.AutoButtonColor = false
+    bubble.Visible = false
+    bubble.ZIndex = 15
+    bubble.Parent = screenGui
+    Instance.new("UICorner", bubble).CornerRadius = UDim.new(1, 0)
+    local bubbleStroke = Instance.new("UIStroke")
+    bubbleStroke.Color = THEME.DividerColor
+    bubbleStroke.Thickness = 1
+    bubbleStroke.Parent = bubble
+    drawBurger(bubble, 18, THEME.TextColor)
+    attachPressEffect(bubble, 1.1)
+    _tinsert(protectedInstances, bubble)
+    AntiDex.protect(bubble)
+
+    -- Bubble drag + tap
+    bubble.InputBegan:Connect(function(input)
+        if not isTouchOrMouse(input) then return end
+        local startInputPos = input.Position
+        local startBubblePos = bubble.Position
+        local moved = false
+        local moveConn
+        moveConn = UserInputService.InputChanged:Connect(function(changed)
+            if changed ~= input and not (input.UserInputType == Enum.UserInputType.MouseButton1 and changed.UserInputType == Enum.UserInputType.MouseMovement) then return end
+            local delta = changed.Position - startInputPos
+            if delta.Magnitude > 8 then moved = true end
+            if moved then
+                local vp2 = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+                local newX = _mclamp(startBubblePos.X.Scale * vp2.X + startBubblePos.X.Offset + delta.X, 4, vp2.X - bubbleSize - 4)
+                local newY = _mclamp(startBubblePos.Y.Scale * vp2.Y + startBubblePos.Y.Offset + delta.Y, 4, vp2.Y - bubbleSize - 4)
+                bubble.Position = UDim2.new(0, newX, 0, newY)
+            end
+        end)
+        watchInputEnd(input, function()
+            moveConn:Disconnect()
+            if not moved then
+                self:SetOpen(true)
+            end
+        end)
+    end)
+
+    -- ===== OPEN / CLOSE LOGIC =====
+    function self:SetOpen(open)
+        if self.Destroyed then return end
+        if open == self.IsOpen then return end
+        self.IsOpen = open
+
+        if open then
+            -- === SHOW ===
+            if self.HideMethod == 4 then
+                -- Circle button stays visible
+            else
+                -- Hide bubble
+                bubble.Visible = false
+            end
+
+            if self.HideMethod == 1 then
+                -- Wave show from top center
+                WaveAnim.show(mainFrame, windowScale, 0.5, 0, 0.4)
+            elseif self.HideMethod == 2 then
+                -- Normal show + fill bottom line
+                mainFrame.Visible = true
+                windowScale.Scale = 0.92
+                createTween(windowScale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+                -- Fill animation
+                bottomLine.Visible = true
+                bottomLineFill.Size = UDim2.new(0, 0, 1, 0)
+                BezierEngine.tween(bottomLineFill, {
+                    Size = UDim2.new(1, 0, 1, 0),
+                }, 0.6, "EaseOutExpo")
+            elseif self.HideMethod == 3 then
+                -- Wave show from center
+                WaveAnim.show(mainFrame, windowScale, 0.5, 0.5, 0.4)
+            elseif self.HideMethod == 4 then
+                -- Wave show from left center (where circle button is)
+                WaveAnim.show(mainFrame, windowScale, 0, 0.5, 0.4)
+            end
+        else
+            -- === HIDE ===
+            if self.HideMethod == 1 then
+                -- Wave hide to top center
+                WaveAnim.hide(mainFrame, windowScale, 0.5, 0, 0.4, function()
+                    bubble.Visible = true
+                end)
+            elseif self.HideMethod == 2 then
+                -- Drain bottom line, then hide
+                BezierEngine.tween(bottomLineFill, {
+                    Size = UDim2.new(0, 0, 1, 0),
+                }, 0.4, "EaseInExpo", function()
+                    createTween(windowScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.92 }).Completed:Connect(function()
+                        if not self.IsOpen then
+                            mainFrame.Visible = false
+                            bubble.Visible = true
+                        end
+                    end)
+                end)
+            elseif self.HideMethod == 3 then
+                -- Wave hide to center (where title was tapped)
+                WaveAnim.hide(mainFrame, windowScale, 0.5, 0.1, 0.4, function()
+                    -- Method 3: no bubble, double-tap to reopen
+                end)
+            elseif self.HideMethod == 4 then
+                -- Wave hide to left center
+                WaveAnim.hide(mainFrame, windowScale, 0, 0.5, 0.4)
+            end
+        end
+    end
+
+    function self:UpdateHideMethod(method)
+        self.HideMethod = method
+        settingsCache:Set("HideMethod", method)
+
+        -- Update visibility of controls
+        closeBtn.Visible = (method == 1)
+        bottomLine.Visible = (method == 2)
+        circleBtn.Visible = (method == 4)
+
+        -- Bubble is shown when menu is closed (except method 3 and 4)
+        if not self.IsOpen then
+            bubble.Visible = (method ~= 3 and method ~= 4)
+        end
+    end
+
+    -- Method 1: Close button click
+    closeBtn.Activated:Connect(function()
+        if self.HideMethod == 1 then
+            self:SetOpen(false)
+        end
+    end)
+
+    -- Method 3: Tap on title text to hide
+    titleLabel.InputBegan:Connect(function(input)
+        if self.HideMethod ~= 3 then return end
+        if not isTouchOrMouse(input) then return end
+        local startPos = input.Position
+        local startTime = os.clock()
+        watchInputEnd(input, function()
+            local dist = (input.Position - startPos).Magnitude
+            if (os.clock() - startTime) < 0.3 and dist < 10 then
+                self:SetOpen(false)
+            end
+        end)
+    end)
+
+    -- Method 3: Double-tap center of screen to open
+    local lastTapTime = 0
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed or self.IsOpen or self.Destroyed then return end
+        if self.HideMethod ~= 3 then return end -- Only for method 3
+        if isTouchOrMouse(input) then
+            local cam = Workspace.CurrentCamera
+            if not cam then return end
+            local screenCenter = cam.ViewportSize / 2
+            local inputPos = Vector2.new(input.Position.X, input.Position.Y)
+            if (inputPos - screenCenter).Magnitude <= 160 then
+                local currentTime = os.clock()
+                if currentTime - lastTapTime <= 0.35 then
+                    self:SetOpen(true)
+                end
+                lastTapTime = currentTime
+            end
+        end
+    end)
+
+    -- Drag header
+    local dragInput = nil
+    header.InputBegan:Connect(function(input)
+        if not isTouchOrMouse(input) then return end
+        if dragInput then return end
+        dragInput = input
+        local dragStart = input.Position
+        local startPos = mainFrame.Position
+        local moveConn
+        moveConn = UserInputService.InputChanged:Connect(function(changed)
+            if changed ~= input and not (input.UserInputType == Enum.UserInputType.MouseButton1 and changed.UserInputType == Enum.UserInputType.MouseMovement) then return end
+            local delta = changed.Position - dragStart
+            local vp2 = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+            local newX = _mclamp(startPos.X.Scale * vp2.X + startPos.X.Offset + delta.X, -windowSize.X + 60, vp2.X - 60)
+            local newY = _mclamp(startPos.Y.Scale * vp2.Y + startPos.Y.Offset + delta.Y, 0, vp2.Y - headerH)
+            mainFrame.Position = UDim2.new(0, newX, 0, newY)
+        end)
+        watchInputEnd(input, function()
+            moveConn:Disconnect()
+            dragInput = nil
+        end)
+    end)
+
+    function self:Destroy()
+        if self.Destroyed then return end
+        self.Destroyed = true
+        createTween(windowScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.85 }).Completed:Connect(function()
+            screenGui:Destroy()
+        end)
+        _pcall(function() bubble:Destroy() end)
+        _pcall(function() circleBtn:Destroy() end)
+    end
+
+    -- Notifications (сохраняю твою систему)
+    local notifyHolder = Instance.new("Frame")
+    notifyHolder.Size = UDim2.new(0, 240, 1, -20)
+    notifyHolder.Position = UDim2.new(1, -250, 0, 10)
+    notifyHolder.BackgroundTransparency = 1
+    notifyHolder.Parent = screenGui
+    local notifyLayout = Instance.new("UIListLayout")
+    notifyLayout.Padding = UDim.new(0, 6)
+    notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    notifyLayout.Parent = notifyHolder
+
+    function self:Notify(text, duration)
+        duration = duration or 2.5
+        local note = Instance.new("Frame")
+        note.Size = UDim2.new(1, 0, 0, 40)
+        note.BackgroundColor3 = THEME.ContainerColor
+        note.BackgroundTransparency = 1
+        note.Parent = notifyHolder
+        Instance.new("UICorner", note).CornerRadius = UDim.new(0, 10)
+        local noteStroke = Instance.new("UIStroke")
+        noteStroke.Color = THEME.DividerColor
+        noteStroke.Transparency = 1
+        noteStroke.Parent = note
+        local noteLabel = Instance.new("TextLabel")
+        noteLabel.Size = UDim2.new(1, -24, 1, 0)
+        noteLabel.Position = UDim2.new(0, 12, 0, 0)
+        noteLabel.Text = text
+        noteLabel.Font = THEME.Font
+        noteLabel.TextSize = 13
+        noteLabel.TextColor3 = THEME.TextColor
+        noteLabel.TextTransparency = 1
+        noteLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noteLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        noteLabel.BackgroundTransparency = 1
+        noteLabel.Parent = note
+        createTween(note, T_FAST, { BackgroundTransparency = 0 })
+        createTween(noteStroke, T_FAST, { Transparency = 0 })
+        createTween(noteLabel, T_FAST, { TextTransparency = 0 })
+        _delay(duration, function()
+            createTween(note, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
+            createTween(noteStroke, TweenInfo.new(0.2), { Transparency = 1 })
+            createTween(noteLabel, TweenInfo.new(0.2), { TextTransparency = 1 }).Completed:Connect(function()
+                note:Destroy()
+            end)
+        end)
+    end
+
+    -- Start name rotation for all protected instances
+    AntiDex.startNameRotation(protectedInstances)
+
+    -- Store refs for part 2
+    self._closeBtn = closeBtn
+    self._bottomLine = bottomLine
+    self._bottomLineFill = bottomLineFill
+    self._circleBtn = circleBtn
+    self._bubble = bubble
+    self._avatarHolder = avatarHolder
+    self._setAvatarEnabled = setAvatarEnabled
+    self._protectedInstances = protectedInstances
+    self._headerH = headerH
+
+    -- ============================================================
+    -- TAB SYSTEM + ELEMENTS → see PART 2
+    -- ============================================================
+        -- ============================================================
+    -- SECTION 11: TAB SYSTEM (pop-in animation)
+    -- ============================================================
+
+    function self:SelectTab(name)
+        local targetTab = self.Tabs[name]
+        if not targetTab or self.CurrentTab == targetTab then return end
+
+        local oldTab = self.CurrentTab
+        self.CurrentTab = targetTab
+
+        if oldTab then
+            createTween(oldTab.Button, T_FAST, { BackgroundTransparency = 1 })
+            createTween(oldTab.Button.TextLabel, T_FAST, { TextColor3 = THEME.SecondaryText })
+            oldTab.Button.TextLabel.Font = Enum.Font.Gotham
+
+            createTween(oldTab.CanvasGroup, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                GroupTransparency = 1,
+                Position = UDim2.new(0, -6, 0, 0)
+            }).Completed:Connect(function()
+                if self.CurrentTab ~= oldTab then oldTab.CanvasGroup.Visible = false end
+            end)
+        end
+
+        createTween(targetTab.Button, T_FAST, { BackgroundTransparency = 0 })
+        createTween(targetTab.Button.TextLabel, T_FAST, { TextColor3 = THEME.TextColor })
+        targetTab.Button.TextLabel.Font = Enum.Font.GothamBold
+
+        targetTab.CanvasGroup.Position = UDim2.new(0, 6, 0, 0)
+        targetTab.CanvasGroup.GroupTransparency = 1
+        targetTab.CanvasGroup.Visible = true
+
+        createTween(targetTab.CanvasGroup, T_FAST, {
+            GroupTransparency = 0,
+            Position = UDim2.new(0, 0, 0, 0)
+        })
+
+        -- Pop-in (выпухание) для каждого элемента
+        local children = targetTab.Container:GetChildren()
+        local delay_i = 0
+        for _, child in _ipairs(children) do
+            if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+                local origSize = child:GetAttribute("_origSize")
+                if origSize then
+                    child.Size = UDim2.new(origSize.X.Scale, origSize.X.Offset, 0, 0)
+                    child.BackgroundTransparency = 1
+                    _delay(delay_i * 0.035, function()
+                        BezierEngine.tween(child, {
+                            Size = origSize,
+                            BackgroundTransparency = child:GetAttribute("_origBgTrans") or 0,
+                        }, 0.28, "EaseOutBack")
+                    end)
+                    delay_i += 1
+                end
+            end
+        end
+    end
+
+    function self:CreateTab(name)
+        local tab = _setmetatable({}, TabClass)
+        tab.Name = name
+        tab.Window = self
+
+        self.TabOrder += 1
+
+        local btnH = IS_MOBILE and 40 or 34
+        local btnFrame = Instance.new("TextButton")
+        btnFrame.Size = UDim2.new(1, -8, 0, btnH)
+        btnFrame.BackgroundColor3 = THEME.ContainerColor
+        btnFrame.BackgroundTransparency = 1
+        btnFrame.Text = ""
+        btnFrame.AutoButtonColor = false
+        btnFrame.LayoutOrder = self.TabOrder
+        btnFrame.Parent = sidebar
+
+        Instance.new("UICorner", btnFrame).CornerRadius = UDim.new(0, 10)
+
+        local btnLabel = Instance.new("TextLabel")
+        btnLabel.Name = "TextLabel"
+        btnLabel.Size = UDim2.new(1, 0, 1, 0)
+        btnLabel.Text = name
+        btnLabel.Font = THEME.Font
+        btnLabel.TextSize = 13
+        btnLabel.TextColor3 = THEME.SecondaryText
+        btnLabel.BackgroundTransparency = 1
+        btnLabel.Parent = btnFrame
+
+        attachPressEffect(btnFrame, 1.05)
+
+        local canvasGroup = Instance.new("CanvasGroup")
+        canvasGroup.Size = UDim2.new(1, 0, 1, 0)
+        canvasGroup.BackgroundTransparency = 1
+        canvasGroup.GroupTransparency = 1
+        canvasGroup.Visible = false
+        canvasGroup.Parent = contentFrame
+
+        local container = Instance.new("ScrollingFrame")
+        container.Size = UDim2.new(1, 0, 1, 0)
+        container.BackgroundTransparency = 1
+        container.BorderSizePixel = 0
+        container.ScrollBarThickness = 0
+        container.ScrollingDirection = Enum.ScrollingDirection.Y
+        container.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+        container.CanvasSize = UDim2.new(0, 0, 0, 0)
+        container.Parent = canvasGroup
+
+        local layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 7)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = container
+
+        layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            container.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
+        end)
+
+        tab.Button = btnFrame
+        tab.CanvasGroup = canvasGroup
+        tab.Container = container
+        tab._lastRow = nil
+
+        btnFrame.Activated:Connect(function()
+            self:SelectTab(name)
+        end)
+
+        self.Tabs[name] = tab
+
+        if not self.CurrentTab then
+            _defer(function() self:SelectTab(name) end)
+        end
+
+        return tab
+    end
+
+    -- Helper: store original size for pop-in
+    local function storeOrigSize(frame, bgTrans)
+        frame:SetAttribute("_origSize", frame.Size)
+        frame:SetAttribute("_origBgTrans", bgTrans or 0)
+    end
+
+    -- ============================================================
+    -- SECTION 12: LAYOUT RESOLVER (сохраняю твою систему)
+    -- ============================================================
+
+    local function resolveLayout(tab, defaultHeight, opts)
+        opts = opts or {}
+        local height = opts.Height or defaultHeight
+        local width = opts.Width
+
+        if width and width < 1 then
+            local row
+            if opts.Inline and tab._lastRow then
+                row = tab._lastRow
+            else
+                row = Instance.new("Frame")
+                row.Size = UDim2.new(1, 0, 0, height)
+                row.BackgroundTransparency = 1
+                row.Parent = tab.Container
+                storeOrigSize(row, 1)
+
+                local rowLayout = Instance.new("UIListLayout")
+                rowLayout.FillDirection = Enum.FillDirection.Horizontal
+                rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                rowLayout.Padding = UDim.new(0, 6)
+                rowLayout.Parent = row
+
+                tab._lastRow = row
+            end
+            return row, UDim2.new(width, -4, 1, 0)
+        else
+            tab._lastRow = nil
+            return tab.Container, UDim2.new(1, 0, 0, height)
+        end
+    end
+
+    -- ============================================================
+    -- SECTION 13: UI ELEMENTS
+    -- ============================================================
+
+    function TabClass:SetVisible(visible)
+        self.Button.Visible = visible
+    end
+
+    function TabClass:Section(text)
+        self._lastRow = nil
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 24)
+        label.Text = _supper(text)
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 11
+        label.TextColor3 = THEME.SecondaryText
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.BackgroundTransparency = 1
+        label.Parent = self.Container
+        storeOrigSize(label, 1)
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 12)
+        pad.PaddingTop = UDim.new(0, 6)
+        pad.Parent = label
+    end
+
+    function TabClass:Label(text, opts)
+        local parent, size = resolveLayout(self, 32, opts)
+        local item = Instance.new("Frame")
+        item.Size = size
+        item.BackgroundColor3 = THEME.ContainerColor
+        item.BackgroundTransparency = 0.5
+        item.Parent = parent
+        storeOrigSize(item, 0.5)
+        Instance.new("UICorner", item).CornerRadius = UDim.new(0, 8)
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -24, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Text = text
+        label.Font = THEME.Font
+        label.TextSize = 12
+        label.TextColor3 = THEME.SecondaryText
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextWrapped = true
+        label.BackgroundTransparency = 1
+        label.Parent = item
+
+        local api = {}
+        function api:Set(val) label.Text = val end
+        return api
+    end
+
+    function TabClass:Image(url, opts)
+        opts = opts or {}
+        local height = opts.Height or 120
+        local parent, size = resolveLayout(self, height, opts)
+
+        local item = Instance.new("Frame")
+        item.Size = size
+        item.BackgroundColor3 = THEME.ContainerColor
+        item.Parent = parent
+        storeOrigSize(item, 0)
+        Instance.new("UICorner", item).CornerRadius = UDim.new(0, 8)
+
+        local img = Instance.new("ImageLabel")
+        img.Size = UDim2.new(1, -8, 1, -8)
+        img.Position = UDim2.new(0, 4, 0, 4)
+        img.BackgroundTransparency = 1
+        img.ScaleType = opts.Stretch and Enum.ScaleType.Stretch or Enum.ScaleType.Fit
+        img.ImageTransparency = 1
+        img.Parent = item
+        Instance.new("UICorner", img).CornerRadius = UDim.new(0, 6)
+
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Size = UDim2.new(1, 0, 1, 0)
+        statusLabel.Text = "Loading..."
+        statusLabel.Font = THEME.Font
+        statusLabel.TextSize = 12
+        statusLabel.TextColor3 = THEME.SecondaryText
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Parent = item
+
+        _spawn(function()
+            local asset = fetchImage(url)
+            if asset then
+                img.Image = asset
+                statusLabel:Destroy()
+                createTween(img, T_FAST, { ImageTransparency = 0 })
+            else
+                statusLabel.Text = "Failed to load"
+            end
+        end)
+
+        return img
+    end
+
+    -- ==================== IMAGE GRID (карточки с фото) ====================
+    function TabClass:ImageGrid(images, opts)
+        -- images = { {Url="...", Text="Title", Callback=fn}, ... }
+        opts = opts or {}
+        local columns = opts.Columns or 3
+        local cardH = opts.CardHeight or 100
+        local imgH = cardH - 24
+
+        self._lastRow = nil
+
+        local rows = _mceil(#images / columns)
+        local totalH = rows * (cardH + 6)
+
+        local gridFrame = Instance.new("Frame")
+        gridFrame.Size = UDim2.new(1, 0, 0, totalH)
+        gridFrame.BackgroundTransparency = 1
+        gridFrame.Parent = self.Container
+        storeOrigSize(gridFrame, 1)
+
+        local grid = Instance.new("UIGridLayout")
+        grid.CellPadding = UDim2.fromOffset(6, 6)
+        grid.CellSize = UDim2.new(1 / columns, -(6 * (columns - 1) / columns), 0, cardH)
+        grid.SortOrder = Enum.SortOrder.LayoutOrder
+        grid.Parent = gridFrame
+
+        for _, imgData in _ipairs(images) do
+            local card = Instance.new("Frame")
+            card.BackgroundColor3 = THEME.ContainerColor
+            card.BorderSizePixel = 0
+            card.ClipsDescendants = true
+            card.Parent = gridFrame
+            Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+            local imageLabel = Instance.new("ImageLabel")
+            imageLabel.Size = UDim2.new(1, -4, 0, imgH - 4)
+            imageLabel.Position = UDim2.new(0, 2, 0, 2)
+            imageLabel.BackgroundTransparency = 1
+            imageLabel.ScaleType = Enum.ScaleType.Crop
+            imageLabel.Parent = card
+            Instance.new("UICorner", imageLabel).CornerRadius = UDim.new(0, 6)
+
+            -- Load image
+            if imgData.Url then
+                imageLabel.ImageTransparency = 1
+                _spawn(function()
+                    local asset = fetchImage(imgData.Url)
+                    if asset then
+                        imageLabel.Image = asset
+                        createTween(imageLabel, T_FAST, { ImageTransparency = 0 })
+                    end
+                end)
+            elseif imgData.Asset then
+                imageLabel.Image = imgData.Asset
+            end
+
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Size = UDim2.new(1, -8, 0, 22)
+            textLabel.Position = UDim2.new(0, 4, 1, -23)
+            textLabel.BackgroundTransparency = 1
+            textLabel.Text = imgData.Text or ""
+            textLabel.TextColor3 = THEME.TextColor
+            textLabel.TextSize = 10
+            textLabel.Font = THEME.Font
+            textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            textLabel.TextXAlignment = Enum.TextXAlignment.Left
+            textLabel.Parent = card
+
+            if imgData.Callback then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.fromScale(1, 1)
+                btn.BackgroundTransparency = 1
+                btn.Text = ""
+                btn.Parent = card
+                attachPressEffect(btn, 1.03)
+                btn.Activated:Connect(function()
+                    _spawn(wrapCallback(imgData.Callback))
+                end)
+            end
+
+            -- Hover
+            card.MouseEnter:Connect(function()
+                createTween(card, T_FAST, { BackgroundColor3 = THEME.DividerColor })
+            end)
+            card.MouseLeave:Connect(function()
+                createTween(card, T_FAST, { BackgroundColor3 = THEME.ContainerColor })
+            end)
+        end
+
+        return gridFrame
+    end
+
+    -- ==================== TOGGLE ====================
+    function TabClass:Toggle(label, default, callback, opts)
+        local state = default
+        callback = wrapCallback(callback)
+        local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
+        local compact = (opts and opts.Width and opts.Width <= 0.5)
+
+        local itemFrame = Instance.new("TextButton")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Text = ""
+        itemFrame.AutoButtonColor = false
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local switchW = compact and 34 or 38
+        local switchH = compact and 20 or 22
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, -(switchW + 28), 1, 0)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = compact and 13 or 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local switchBg, thumb, thumbSize = makeSwitch(itemFrame, UDim2.new(0, switchW, 0, switchH), -(switchW + 8), state)
+        attachPressEffect(itemFrame, 1.02)
+
+        itemFrame.Activated:Connect(function()
+            state = not state
+            createTween(switchBg, T_FAST, { BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor })
+            createTween(thumb, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = state and UDim2.new(1, -thumbSize - 2, 0.5, -thumbSize / 2) or UDim2.new(0, 2, 0.5, -thumbSize / 2)
+            })
+            _spawn(callback, state)
+        end)
+
+        local api = {}
+        function api:Set(val) state = val
+            createTween(switchBg, T_FAST, { BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor })
+            createTween(thumb, T_FAST, {
+                Position = state and UDim2.new(1, -thumbSize - 2, 0.5, -thumbSize / 2) or UDim2.new(0, 2, 0.5, -thumbSize / 2)
+            })
+            _spawn(callback, state)
+        end
+        function api:Get() return state end
+        return api
+    end
+
+    -- ==================== CHECKBOX (ImGui-style, resizable) ====================
+    function TabClass:Checkbox(label, default, callback, opts)
+        opts = opts or {}
+        local state = default or false
+        callback = wrapCallback(callback)
+        local checkSize = opts.CheckSize or 18
+
+        local parent, size = resolveLayout(self, _mclamp(checkSize + 18, 34, 60), opts)
+
+        local itemFrame = Instance.new("TextButton")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Text = ""
+        itemFrame.AutoButtonColor = false
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local box = Instance.new("Frame")
+        box.Size = UDim2.fromOffset(checkSize, checkSize)
+        box.Position = UDim2.new(0, 12, 0.5, 0)
+        box.AnchorPoint = Vector2.new(0, 0.5)
+        box.BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor
+        box.BorderSizePixel = 0
+        box.Parent = itemFrame
+        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+
+        local boxStroke = Instance.new("UIStroke")
+        boxStroke.Color = THEME.DividerColor
+        boxStroke.Thickness = 1
+        boxStroke.Parent = box
+
+        local checkmark = Instance.new("TextLabel")
+        checkmark.Size = UDim2.fromScale(1, 1)
+        checkmark.BackgroundTransparency = 1
+        checkmark.Text = state and "✓" or ""
+        checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
+        checkmark.TextSize = _mfloor(checkSize * 0.65)
+        checkmark.Font = Enum.Font.GothamBold
+        checkmark.Parent = box
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, -(checkSize + 30), 1, 0)
+        textLabel.Position = UDim2.fromOffset(checkSize + 22, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = label
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextSize = 13
+        textLabel.Font = THEME.Font
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.Parent = itemFrame
+
+        attachPressEffect(itemFrame, 1.02)
+
+        local function updateVisual()
+            createTween(box, T_FAST, {
+                BackgroundColor3 = state and THEME.ToggleOnColor or THEME.DividerColor,
+            })
+            if state then
+                checkmark.Text = "✓"
+                -- Pop effect
+                local boxScale = box:FindFirstChildOfClass("UIScale")
+                if not boxScale then
+                    boxScale = Instance.new("UIScale")
+                    boxScale.Parent = box
+                end
+                boxScale.Scale = 0.8
+                createTween(boxScale, T_RELEASE, { Scale = 1 })
+            else
+                checkmark.Text = ""
+            end
+        end
+
+        itemFrame.Activated:Connect(function()
+            state = not state
+            updateVisual()
+            _spawn(callback, state)
+        end)
+
+        local api = {}
+        function api:Set(val) state = val; updateVisual(); _spawn(callback, state) end
+        function api:Get() return state end
+        function api:SetSize(newSize)
+            checkSize = newSize
+            box.Size = UDim2.fromOffset(checkSize, checkSize)
+            checkmark.TextSize = _mfloor(checkSize * 0.65)
+            textLabel.Size = UDim2.new(1, -(checkSize + 30), 1, 0)
+            textLabel.Position = UDim2.fromOffset(checkSize + 22, 0)
+        end
+        return api
+    end
+
+    -- ==================== BUTTON ====================
+    function TabClass:Button(text, callback, opts)
+        callback = wrapCallback(callback)
+        local parent, size = resolveLayout(self, IS_MOBILE and 44 or 38, opts)
+        local btn = Instance.new("TextButton")
+        btn.Size = size
+        btn.BackgroundColor3 = THEME.DividerColor
+        btn.Text = ""
+        btn.AutoButtonColor = false
+        btn.Parent = parent
+        storeOrigSize(btn, 0)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -8, 1, 0)
+        label.Position = UDim2.new(0, 4, 0, 0)
+        label.Text = text
+        label.Font = THEME.Font
+        label.TextSize = 13
+        label.TextColor3 = THEME.TextColor
+        label.TextTruncate = Enum.TextTruncate.AtEnd
+        label.BackgroundTransparency = 1
+        label.Parent = btn
+
+        attachPressEffect(btn, 1.03)
+        btn.Activated:Connect(function() _spawn(callback) end)
+    end
+
+    -- ==================== SLIDER ====================
+    function TabClass:Slider(label, min, max, default, callback, opts)
+        callback = wrapCallback(callback)
+        local currentVal = _mclamp(default, min, max)
+        local itemH = IS_MOBILE and 58 or 52
+        local parent, size = resolveLayout(self, itemH, opts)
+
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Active = true
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(0.7, 0, 0, 22)
+        textLabel.Position = UDim2.new(0, 12, 0, 5)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 13
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Size = UDim2.new(0.25, 0, 0, 22)
+        valueLabel.Position = UDim2.new(0.75, -12, 0, 5)
+        valueLabel.Text = _sformat("%.1f", currentVal)
+        valueLabel.Font = THEME.Font
+        valueLabel.TextSize = 12
+        valueLabel.TextColor3 = THEME.SecondaryText
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Parent = itemFrame
+
+        local sliderTrack = Instance.new("Frame")
+        sliderTrack.Size = UDim2.new(1, -24, 0, IS_MOBILE and 6 or 4)
+        sliderTrack.Position = UDim2.new(0, 12, 1, -18)
+        sliderTrack.BackgroundColor3 = THEME.DividerColor
+        sliderTrack.BorderSizePixel = 0
+        sliderTrack.Parent = itemFrame
+        Instance.new("UICorner", sliderTrack).CornerRadius = UDim.new(1, 0)
+
+        local sliderFill = Instance.new("Frame")
+        sliderFill.Size = UDim2.new((currentVal - min) / (max - min), 0, 1, 0)
+        sliderFill.BackgroundColor3 = THEME.AccentColor
+        sliderFill.BorderSizePixel = 0
+        sliderFill.Parent = sliderTrack
+        Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
+
+        local knobSize = IS_MOBILE and 20 or 14
+        local knob = Instance.new("Frame")
+        knob.Size = UDim2.new(0, knobSize, 0, knobSize)
+        knob.Position = UDim2.new((currentVal - min) / (max - min), -knobSize / 2, 0.5, -knobSize / 2)
+        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        knob.Parent = sliderTrack
+        Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+        local knobScale = Instance.new("UIScale")
+        knobScale.Scale = 1
+        knobScale.Parent = knob
+
+        local container = self.Container
+
+        local function updateSlider(posX)
+            local absPos = sliderTrack.AbsolutePosition
+            local absSize = sliderTrack.AbsoluteSize
+            local percentage = _mclamp((posX - absPos.X) / absSize.X, 0, 1)
+            currentVal = min + (percentage * (max - min))
+            valueLabel.Text = _sformat("%.1f", currentVal)
+            sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+            knob.Position = UDim2.new(percentage, -knobSize / 2, 0.5, -knobSize / 2)
+            _spawn(callback, currentVal)
+        end
+
+        itemFrame.InputBegan:Connect(function(input)
+            if not isTouchOrMouse(input) then return end
+            local startPos = input.Position
+            local capturing = false
+            local dead = false
+
+            local trackY = sliderTrack.AbsolutePosition.Y + sliderTrack.AbsoluteSize.Y / 2
+            if _mabs(input.Position.Y - trackY) <= (IS_MOBILE and 22 or 14) then
+                capturing = true
+                container.ScrollingEnabled = false
+                createTween(knobScale, T_PRESS, { Scale = 1.25 })
+                updateSlider(input.Position.X)
+            end
+
+            local moveConn
+            moveConn = UserInputService.InputChanged:Connect(function(changed)
+                if changed ~= input and not (input.UserInputType == Enum.UserInputType.MouseButton1 and changed.UserInputType == Enum.UserInputType.MouseMovement) then return end
+                if capturing then
+                    updateSlider(changed.Position.X)
+                elseif not dead then
+                    local delta = changed.Position - startPos
+                    if _mabs(delta.X) > 8 and _mabs(delta.X) > _mabs(delta.Y) then
+                        capturing = true
+                        container.ScrollingEnabled = false
+                        createTween(knobScale, T_PRESS, { Scale = 1.25 })
+                        updateSlider(changed.Position.X)
+                    elseif _mabs(delta.Y) > 10 then
+                        dead = true
+                    end
+                end
+            end)
+
+            watchInputEnd(input, function()
+                moveConn:Disconnect()
+                if capturing then
+                    container.ScrollingEnabled = true
+                    createTween(knobScale, T_RELEASE, { Scale = 1 })
+                end
+            end)
+        end)
+
+        local api = {}
+        function api:Set(val)
+            currentVal = _mclamp(val, min, max)
+            local p = (currentVal - min) / (max - min)
+            sliderFill.Size = UDim2.new(p, 0, 1, 0)
+            knob.Position = UDim2.new(p, -knobSize / 2, 0.5, -knobSize / 2)
+            valueLabel.Text = _sformat("%.1f", currentVal)
+            _spawn(callback, currentVal)
+        end
+        function api:Get() return currentVal end
+        return api
+    end
+
+    -- ==================== DROPDOWN (with multi-select) ====================
+    function TabClass:Dropdown(label, options, default, callback, opts)
+        opts = opts or {}
+        local multi = opts.Multi or false
+        callback = wrapCallback(callback)
+
+        local currentOption
+        local selectedMap = {} -- for multi-select
+
+        if multi then
+            if _type(default) == "table" then
+                for _, v in _ipairs(default) do selectedMap[v] = true end
+            end
+        else
+            currentOption = default or options[1]
+        end
+
+        local expanded = false
+        local baseH = IS_MOBILE and 44 or 40
+        local optH = IS_MOBILE and 38 or 32
+        local expandedH = baseH + #options * (optH + 4) + 8
+
+        self._lastRow = nil
+
+        local function getDisplayText()
+            if multi then
+                local items = {}
+                for _, opt in _ipairs(options) do
+                    if selectedMap[opt] then _tinsert(items, opt) end
+                end
+                if #items == 0 then return "None" end
+                local joined = _tconcat(items, ", ")
+                if _slen(joined) > 25 then
+                    return _ssub(joined, 1, 22) .. "..."
+                end
+                return joined
+            else
+                return currentOption or "Select..."
+            end
+        end
+
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = UDim2.new(1, 0, 0, baseH)
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.ClipsDescendants = true
+        itemFrame.Parent = self.Container
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local headerBtn = Instance.new("TextButton")
+        headerBtn.Size = UDim2.new(1, 0, 0, baseH)
+        headerBtn.BackgroundTransparency = 1
+        headerBtn.Text = ""
+        headerBtn.AutoButtonColor = false
+        headerBtn.Parent = itemFrame
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(0.45, -10, 1, 0)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = headerBtn
+
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Size = UDim2.new(0.55, -44, 1, 0)
+        valueLabel.Position = UDim2.new(0.45, 0, 0, 0)
+        valueLabel.Text = getDisplayText()
+        valueLabel.Font = THEME.Font
+        valueLabel.TextSize = 13
+        valueLabel.TextColor3 = THEME.SecondaryText
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valueLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Parent = headerBtn
+
+        local arrowHolder = Instance.new("Frame")
+        arrowHolder.Size = UDim2.new(0, 24, 0, 24)
+        arrowHolder.Position = UDim2.new(1, -34, 0.5, -12)
+        arrowHolder.BackgroundTransparency = 1
+        arrowHolder.Parent = headerBtn
+        local chevron = drawChevron(arrowHolder, 14, THEME.SecondaryText)
+        chevron.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+        local optionsHolder = Instance.new("Frame")
+        optionsHolder.Size = UDim2.new(1, -16, 0, #options * (optH + 4))
+        optionsHolder.Position = UDim2.new(0, 8, 0, baseH)
+        optionsHolder.BackgroundTransparency = 1
+        optionsHolder.Visible = false
+        optionsHolder.Parent = itemFrame
+
+        local optLayout = Instance.new("UIListLayout")
+        optLayout.Padding = UDim.new(0, 4)
+        optLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        optLayout.Parent = optionsHolder
+
+        local function setExpanded(open)
+            expanded = open
+            createTween(chevron, T_FAST, { Rotation = open and 180 or 0 })
+            if open then
+                itemFrame.Size = UDim2.new(1, 0, 0, expandedH)
+                optionsHolder.Visible = true
+                for _, child in _ipairs(optionsHolder:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        child.BackgroundTransparency = 1
+                        child.TextTransparency = 1
+                        createTween(child, T_FAST, { BackgroundTransparency = 0, TextTransparency = 0 })
+                    end
+                end
+            else
+                optionsHolder.Visible = false
+                itemFrame.Size = UDim2.new(1, 0, 0, baseH)
+            end
+        end
+
+        local function updateOptionColors()
+            for _, child in _ipairs(optionsHolder:GetChildren()) do
+                if child:IsA("TextButton") then
+                    local isSelected
+                    if multi then
+                        isSelected = selectedMap[child.Text]
+                    else
+                        isSelected = child.Text == currentOption
+                    end
+                    child.TextColor3 = isSelected and THEME.TextColor or THEME.SecondaryText
+                    child.BackgroundColor3 = isSelected and THEME.ToggleOnColor or THEME.DividerColor
+                end
+            end
+        end
+
+        for _, option in _ipairs(options) do
+            local optBtn = Instance.new("TextButton")
+            optBtn.Size = UDim2.new(1, 0, 0, optH)
+            optBtn.BackgroundColor3 = THEME.DividerColor
+            optBtn.Text = option
+            optBtn.Font = THEME.Font
+            optBtn.TextSize = 13
+            optBtn.TextColor3 = THEME.SecondaryText
+            optBtn.AutoButtonColor = false
+            optBtn.Parent = optionsHolder
+            Instance.new("UICorner", optBtn).CornerRadius = UDim.new(0, 6)
+            attachPressEffect(optBtn, 1.02)
+
+            -- Initial color
+            if multi then
+                if selectedMap[option] then
+                    optBtn.TextColor3 = THEME.TextColor
+                    optBtn.BackgroundColor3 = THEME.ToggleOnColor
+                end
+            else
+                if option == currentOption then
+                    optBtn.TextColor3 = THEME.TextColor
+                end
+            end
+
+            optBtn.Activated:Connect(function()
+                if multi then
+                    selectedMap[option] = not selectedMap[option] or nil
+                    valueLabel.Text = getDisplayText()
+                    updateOptionColors()
+                    -- Return a copy
+                    local result = {}
+                    for _, o in _ipairs(options) do
+                        if selectedMap[o] then _tinsert(result, o) end
+                    end
+                    _spawn(callback, result)
+                else
+                    currentOption = option
+                    valueLabel.Text = getDisplayText()
+                    updateOptionColors()
+                    setExpanded(false)
+                    _spawn(callback, option)
+                end
+            end)
+        end
+
+        attachPressEffect(headerBtn, 1.01)
+        headerBtn.Activated:Connect(function()
+            setExpanded(not expanded)
+        end)
+
+        local api = {}
+        function api:Set(val)
+            if multi and _type(val) == "table" then
+                selectedMap = {}
+                for _, v in _ipairs(val) do selectedMap[v] = true end
+                valueLabel.Text = getDisplayText()
+                updateOptionColors()
+            elseif not multi then
+                currentOption = val
+                valueLabel.Text = getDisplayText()
+                updateOptionColors()
+            end
+        end
+        function api:Get()
+            if multi then
+                local result = {}
+                for _, o in _ipairs(options) do
+                    if selectedMap[o] then _tinsert(result, o) end
+                end
+                return result
+            end
+            return currentOption
+        end
+        return api
+    end
+
+    -- ==================== INPUT ====================
+    function TabClass:Input(label, inputType, default, callback, opts)
+        callback = wrapCallback(callback)
+        local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(0.5, -10, 1, 0)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local boxH = IS_MOBILE and 32 or 26
+        local inputBox = Instance.new("TextBox")
+        inputBox.Size = UDim2.new(0.45, 0, 0, boxH)
+        inputBox.Position = UDim2.new(0.55, -12, 0.5, -boxH / 2)
+        inputBox.BackgroundColor3 = THEME.BgColor
+        inputBox.Text = default
+        inputBox.Font = THEME.Font
+        inputBox.TextSize = 13
+        inputBox.TextColor3 = THEME.TextColor
+        inputBox.ClearTextOnFocus = false
+        inputBox.Parent = itemFrame
+        Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 6)
+
+        local boxStroke = Instance.new("UIStroke")
+        boxStroke.Color = THEME.DividerColor
+        boxStroke.Thickness = 1
+        boxStroke.Parent = inputBox
+
+        inputBox.Focused:Connect(function()
+            createTween(boxStroke, T_FAST, { Color = THEME.AccentColor })
+        end)
+
+        inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+            local text = inputBox.Text
+            if inputType == "Number" then
+                local filtered = text:gsub("[^%d%.%-]", "")
+                if filtered ~= text then inputBox.Text = filtered end
+            elseif inputType == "Text" then
+                local filtered = text:gsub("[%d]", "")
+                if filtered ~= text then inputBox.Text = filtered end
+            end
+        end)
+
+        inputBox.FocusLost:Connect(function()
+            createTween(boxStroke, T_FAST, { Color = THEME.DividerColor })
+            _spawn(callback, inputBox.Text)
+        end)
+
+        local api = {}
+        function api:Set(val) inputBox.Text = val end
+        function api:Get() return inputBox.Text end
+        return api
+    end
+
+    -- ==================== VARIABLE BUTTON ====================
+    function TabClass:VariableBtn(label, defaultText, btnText, callback, opts)
+        callback = wrapCallback(callback)
+        local parent, size = resolveLayout(self, IS_MOBILE and 46 or 40, opts)
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(0.35, -10, 1, 0)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local boxH = IS_MOBILE and 32 or 26
+        local inputBox = Instance.new("TextBox")
+        inputBox.Size = UDim2.new(0.32, -6, 0, boxH)
+        inputBox.Position = UDim2.new(0.37, 0, 0.5, -boxH / 2)
+        inputBox.BackgroundColor3 = THEME.BgColor
+        inputBox.Text = defaultText
+        inputBox.Font = THEME.Font
+        inputBox.TextSize = 13
+        inputBox.TextColor3 = THEME.TextColor
+        inputBox.ClearTextOnFocus = false
+        inputBox.Parent = itemFrame
+        Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 6)
+
+        local actionBtn = Instance.new("TextButton")
+        actionBtn.Size = UDim2.new(0.26, -12, 0, boxH)
+        actionBtn.Position = UDim2.new(0.74, 0, 0.5, -boxH / 2)
+        actionBtn.BackgroundColor3 = THEME.AccentColor
+        actionBtn.Text = ""
+        actionBtn.AutoButtonColor = false
+        actionBtn.Parent = itemFrame
+        Instance.new("UICorner", actionBtn).CornerRadius = UDim.new(0, 6)
+
+        local btnLabel = Instance.new("TextLabel")
+        btnLabel.Size = UDim2.new(1, 0, 1, 0)
+        btnLabel.Text = btnText
+        btnLabel.Font = THEME.Font
+        btnLabel.TextSize = 12
+        btnLabel.TextColor3 = THEME.BgColor
+        btnLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        btnLabel.BackgroundTransparency = 1
+        btnLabel.Parent = actionBtn
+
+        attachPressEffect(actionBtn, 1.05)
+        actionBtn.Activated:Connect(function()
+            _spawn(callback, inputBox.Text)
+        end)
+    end
+
+    -- ==================== COLOR PICKER ====================
+    function TabClass:ColorPicker(label, default, callback, opts)
+        callback = wrapCallback(callback)
+        local parent, size = resolveLayout(self, IS_MOBILE and 44 or 38, opts)
+        local currentColor = default or Color3.fromRGB(255, 255, 255)
+        local expanded = false
+        local hue, sat, val = currentColor:ToHSV()
+
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.ClipsDescendants = true
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, -50, 0, size.Y.Offset or 38)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local preview = Instance.new("Frame")
+        preview.Size = UDim2.fromOffset(22, 22)
+        preview.Position = UDim2.new(1, -34, 0, (_mfloor((size.Y.Offset or 38) / 2)) - 11)
+        preview.BackgroundColor3 = currentColor
+        preview.BorderSizePixel = 0
+        preview.Parent = itemFrame
+        Instance.new("UICorner", preview).CornerRadius = UDim.new(0, 6)
+        local previewStroke = Instance.new("UIStroke")
+        previewStroke.Color = THEME.DividerColor
+        previewStroke.Thickness = 1
+        previewStroke.Parent = preview
+
+        local baseH = size.Y.Offset or 38
+        local pickerH = 90
+
+        -- HSV sliders
+        local pickerHolder = Instance.new("Frame")
+        pickerHolder.Size = UDim2.new(1, -16, 0, pickerH)
+        pickerHolder.Position = UDim2.new(0, 8, 0, baseH + 4)
+        pickerHolder.BackgroundTransparency = 1
+        pickerHolder.Visible = false
+        pickerHolder.Parent = itemFrame
+
+        local function createHSVSlider(yPos, label_text, startVal, gradient)
+            local track = Instance.new("Frame")
+            track.Size = UDim2.new(1, 0, 0, 12)
+            track.Position = UDim2.fromOffset(0, yPos)
+            track.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
+            track.BorderSizePixel = 0
+            track.Parent = pickerHolder
+            Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+            if gradient then
+                local uiGrad = Instance.new("UIGradient")
+                uiGrad.Color = gradient
+                uiGrad.Parent = track
+            end
+
+            local sKnob = Instance.new("Frame")
+            sKnob.Size = UDim2.fromOffset(10, 16)
+            sKnob.Position = UDim2.new(startVal, 0, 0.5, 0)
+            sKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+            sKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            sKnob.BorderSizePixel = 0
+            sKnob.ZIndex = 5
+            sKnob.Parent = track
+            Instance.new("UICorner", sKnob).CornerRadius = UDim.new(0, 4)
+
+            return track, sKnob
+        end
+
+        local hueGrad = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromHSV(0, 1, 1)),
+            ColorSequenceKeypoint.new(0.167, Color3.fromHSV(0.167, 1, 1)),
+            ColorSequenceKeypoint.new(0.333, Color3.fromHSV(0.333, 1, 1)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromHSV(0.5, 1, 1)),
+            ColorSequenceKeypoint.new(0.667, Color3.fromHSV(0.667, 1, 1)),
+            ColorSequenceKeypoint.new(0.833, Color3.fromHSV(0.833, 1, 1)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV(1, 1, 1)),
+        })
+
+        local hueTrack, hueKnob = createHSVSlider(0, "H", hue, hueGrad)
+        local satTrack, satKnob = createHSVSlider(26, "S", sat)
+        local valTrack, valKnob = createHSVSlider(52, "V", val)
+
+        local function updateColor()
+            currentColor = Color3.fromHSV(_mclamp(hue, 0, 1), _mclamp(sat, 0, 1), _mclamp(val, 0, 1))
+            preview.BackgroundColor3 = currentColor
+            -- Update sat/val track colors for visual feedback
+            satTrack.BackgroundColor3 = Color3.fromHSV(hue, 0.3, val)
+            valTrack.BackgroundColor3 = Color3.fromHSV(hue, sat, 0.3)
+            _spawn(callback, currentColor)
+        end
+
+        local function setupDrag(track, knob, setter)
+            local dragging = false
+            track.InputBegan:Connect(function(input)
+                if isTouchOrMouse(input) then
+                    dragging = true
+                    local pct = _mclamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+                    knob.Position = UDim2.new(pct, 0, 0.5, 0)
+                    setter(pct)
+                    updateColor()
+                    watchInputEnd(input, function() dragging = false end)
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local pct = _mclamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+                    knob.Position = UDim2.new(pct, 0, 0.5, 0)
+                    setter(pct)
+                    updateColor()
+                end
+            end)
+        end
+
+        setupDrag(hueTrack, hueKnob, function(v) hue = v end)
+        setupDrag(satTrack, satKnob, function(v) sat = v end)
+        setupDrag(valTrack, valKnob, function(v) val = v end)
+
+        -- Toggle
+        local toggleBtn = Instance.new("TextButton")
+        toggleBtn.Size = UDim2.new(1, 0, 0, baseH)
+        toggleBtn.BackgroundTransparency = 1
+        toggleBtn.Text = ""
+        toggleBtn.Parent = itemFrame
+
+        toggleBtn.Activated:Connect(function()
+            expanded = not expanded
+            if expanded then
+                pickerHolder.Visible = true
+                itemFrame.Size = UDim2.new(1, 0, 0, baseH + pickerH + 12)
+            else
+                pickerHolder.Visible = false
+                itemFrame.Size = UDim2.new(1, 0, 0, baseH)
+            end
+        end)
+
+        local api = {}
+        function api:Set(color)
+            currentColor = color
+            hue, sat, val = color:ToHSV()
+            preview.BackgroundColor3 = color
+            hueKnob.Position = UDim2.new(hue, 0, 0.5, 0)
+            satKnob.Position = UDim2.new(sat, 0, 0.5, 0)
+            valKnob.Position = UDim2.new(val, 0, 0.5, 0)
+        end
+        function api:Get() return currentColor end
+        return api
+    end
+
+    -- ==================== KEYBIND ====================
+    function TabClass:Keybind(label, default, callback, opts)
+        callback = wrapCallback(callback)
+        local currentKey = default or Enum.KeyCode.Unknown
+        local listening = false
+
+        local parent, size = resolveLayout(self, IS_MOBILE and 44 or 38, opts)
+
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Size = size
+        itemFrame.BackgroundColor3 = THEME.ContainerColor
+        itemFrame.Parent = parent
+        storeOrigSize(itemFrame, 0)
+        Instance.new("UICorner", itemFrame).CornerRadius = UDim.new(0, 8)
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(0.6, 0, 1, 0)
+        textLabel.Position = UDim2.new(0, 12, 0, 0)
+        textLabel.Text = label
+        textLabel.Font = THEME.Font
+        textLabel.TextSize = 14
+        textLabel.TextColor3 = THEME.TextColor
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.BackgroundTransparency = 1
+        textLabel.Parent = itemFrame
+
+        local boxH = IS_MOBILE and 28 or 24
+        local keyBtn = Instance.new("TextButton")
+        keyBtn.Size = UDim2.new(0.32, -10, 0, boxH)
+        keyBtn.Position = UDim2.new(0.68, 0, 0.5, -boxH / 2)
+        keyBtn.BackgroundColor3 = THEME.BgColor
+        keyBtn.Text = currentKey.Name
+        keyBtn.TextColor3 = THEME.SecondaryText
+        keyBtn.TextSize = 11
+        keyBtn.Font = THEME.Font
+        keyBtn.AutoButtonColor = false
+        keyBtn.Parent = itemFrame
+        Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 6)
+
+        local keyStroke = Instance.new("UIStroke")
+        keyStroke.Color = THEME.DividerColor
+        keyStroke.Thickness = 1
+        keyStroke.Parent = keyBtn
+
+        attachPressEffect(keyBtn, 1.05)
+
+        keyBtn.Activated:Connect(function()
+            listening = true
+            keyBtn.Text = "..."
+            createTween(keyStroke, T_FAST, { Color = THEME.ToggleOnColor })
+        end)
+
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if listening and input.UserInputType == Enum.UserInputType.Keyboard then
+                currentKey = input.KeyCode
+                keyBtn.Text = currentKey.Name
+                listening = false
+                createTween(keyStroke, T_FAST, { Color = THEME.DividerColor })
+            end
+            if not listening and input.KeyCode == currentKey and not gameProcessed then
+                _spawn(callback, currentKey)
+            end
+        end)
+
+        local api = {}
+        function api:Set(key) currentKey = key; keyBtn.Text = key.Name end
+        function api:Get() return currentKey end
+        return api
+    end
+
+    -- ==================== VIEWPORT (full-body avatar display) ====================
+    function TabClass:Viewport(opts)
+        opts = opts or {}
+        local height = opts.Height or 150
+        self._lastRow = nil
+
+        local item = Instance.new("Frame")
+        item.Size = UDim2.new(1, 0, 0, height)
+        item.BackgroundColor3 = THEME.ContainerColor
+        item.ClipsDescendants = true
+        item.Parent = self.Container
+        storeOrigSize(item, 0)
+        Instance.new("UICorner", item).CornerRadius = UDim.new(0, 8)
+
+        local vp = Instance.new("ViewportFrame")
+        vp.Size = UDim2.new(1, 0, 1, 0)
+        vp.BackgroundTransparency = 1
+        vp.Parent = item
+        Instance.new("UICorner", vp).CornerRadius = UDim.new(0, 8)
+
+        _spawn(function()
+            local player = LocalPlayer
+            local char = player.Character or player.CharacterAdded:Wait()
+            _wait(1) -- Wait for clothing to load
+
+            _pcall(function()
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if not humanoid then return end
+
+                local description = humanoid:GetAppliedDescription()
+                local clone = Players:CreateHumanoidModelFromDescription(description, humanoid.RigType)
+
+                for _, obj in clone:GetDescendants() do
+                    if obj:IsA("BaseScript") or obj:IsA("Animator")
+                        or obj:IsA("Animation") or obj:IsA("Sound") then
+                        obj:Destroy()
+                    end
+                end
+
+                local hrp = clone:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Anchored = true
+                    hrp.CFrame = CFrame.new(0, 0, 0)
+                end
+
+                local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+                if cloneHum then cloneHum:Destroy() end
+
+                clone.Parent = vp
+
+                local cam = Instance.new("Camera")
+                cam.Parent = vp
+                vp.CurrentCamera = cam
+                cam.CFrame = CFrame.new(Vector3.new(0, 2, -5.5), Vector3.new(0, 1.5, 0))
+
+                -- Slow rotation
+                local angle = 0
+                RunService.RenderStepped:Connect(function(dt)
+                    if vp.Parent and hrp and hrp.Parent then
+                        angle = angle + dt * 0.4
+                        _pcall(function()
+                            hrp.CFrame = CFrame.new(0, 0, 0) * CFrame.Angles(0, angle, 0)
+                        end)
+                    end
+                end)
+            end)
+        end)
+
+        return vp
+    end
+
+    -- ============================================================
+    -- SECTION 14: SETTINGS TAB (built-in, always last)
+    -- ============================================================
+
+    _defer(function()
+        local settingsTab = self:CreateTab("Settings")
+        settingsTab.Button.LayoutOrder = 9999
+
+        settingsTab:Section("Interface")
+
+        -- Hide method dropdown
+        local hideMethodNames = {
+            [1] = "Крестик + волна вверх",
+            [2] = "Нижняя линия",
+            [3] = "Двойной тап + заголовок",
+            [4] = "Круглая кнопка",
+        }
+        local hideOptions = {}
+        local currentHideName = hideMethodNames[self.HideMethod] or hideMethodNames[1]
+        for i = 1, 4 do _tinsert(hideOptions, hideMethodNames[i]) end
+
+        settingsTab:Dropdown("Скрытие меню", hideOptions, currentHideName, function(option)
+            for idx, name in hideMethodNames do
+                if name == option then
+                    self:UpdateHideMethod(idx)
+                    if idx == 3 then
+                        self:Notify("Двойной тап по центру экрана = открыть\nТап по заголовку = скрыть", 4)
+                    elseif idx == 4 then
+                        self:Notify("Круглая кнопка слева — открыть/скрыть", 3)
+                    end
+                    break
+                end
+            end
+        end)
+
+        -- Animation curve preset
+        settingsTab:Section("Animations")
+
+        local curveNames = BezierEngine.getPresetNames()
+        settingsTab:Dropdown("Кривая анимации", curveNames, currentAnimCurve, function(option)
+            currentAnimCurve = option
+            settingsCache:Set("AnimCurve", option)
+        end)
+
+        settingsTab:Slider("Скорость анимации", 0.2, 2.0, animSpeedMultiplier, function(val)
+            animSpeedMultiplier = val
+            settingsCache:Set("AnimSpeed", val)
+        end)
+
+        settingsTab:Section("Display")
+
+        settingsTab:Toggle("Аватар в шапке", settingsCache:Get("Avatar", false), function(state)
+            self._setAvatarEnabled(state)
+            settingsCache:Set("Avatar", state)
+        end)
+
+        settingsTab:Section("Checkbox")
+
+        local checkboxDemo
+        local checkboxSizeSlider
+
+        checkboxDemo = settingsTab:Checkbox("Пример чекбокса", false, function(state)
+            -- demo
+        end, { CheckSize = settingsCache:Get("CheckSize", 18) })
+
+        checkboxSizeSlider = settingsTab:Slider("Размер чекбокса", 12, 36, settingsCache:Get("CheckSize", 18), function(val)
+            local rounded = _mfloor(val)
+            settingsCache:Set("CheckSize", rounded)
+            checkboxDemo:SetSize(rounded)
+        end)
+
+        settingsTab:Section("Preview")
+
+        settingsTab:Viewport({ Height = 160 })
+
+        settingsTab:Section("Danger zone")
+
+        local rowH = IS_MOBILE and 44 or 38
+        local exitRow = Instance.new("Frame")
+        exitRow.Size = UDim2.new(1, 0, 0, rowH)
+        exitRow.BackgroundTransparency = 1
+        exitRow.Parent = settingsTab.Container
+        storeOrigSize(exitRow, 1)
+
+        local confirming = false
+
+        local cancelBtn = Instance.new("TextButton")
+        cancelBtn.Size = UDim2.new(1, 0, 1, 0)
+        cancelBtn.BackgroundColor3 = THEME.DangerColor
+        cancelBtn.Text = "Выйти"
+        cancelBtn.Font = Enum.Font.GothamBold
+        cancelBtn.TextSize = 14
+        cancelBtn.TextColor3 = THEME.TextColor
+        cancelBtn.AutoButtonColor = false
+        cancelBtn.Parent = exitRow
+        Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0, 8)
+
+        local confirmBtn = Instance.new("TextButton")
+        confirmBtn.Size = UDim2.new(0, 0, 1, 0)
+        confirmBtn.Position = UDim2.new(1, 0, 0, 0)
+        confirmBtn.AnchorPoint = Vector2.new(1, 0)
+        confirmBtn.BackgroundColor3 = THEME.DangerColor
+        confirmBtn.Text = ""
+        confirmBtn.Font = Enum.Font.GothamBold
+        confirmBtn.TextSize = 14
+        confirmBtn.TextColor3 = THEME.TextColor
+        confirmBtn.AutoButtonColor = false
+        confirmBtn.Visible = false
+        confirmBtn.Parent = exitRow
+        Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0, 8)
+
+        attachPressEffect(cancelBtn, 1.02)
+        attachPressEffect(confirmBtn, 1.02)
+
+        local function enterConfirm()
+            confirming = true
+            cancelBtn.Text = "Отменить"
+            createTween(cancelBtn, T_FAST, {
+                Size = UDim2.new(0.5, -3, 1, 0),
+                BackgroundColor3 = THEME.DividerColor,
+            })
+            confirmBtn.Visible = true
+            confirmBtn.Text = "Выйти"
+            createTween(confirmBtn, T_FAST, { Size = UDim2.new(0.5, -3, 1, 0) })
+        end
+
+        local function exitConfirm()
+            confirming = false
+            cancelBtn.Text = "Выйти"
+            createTween(cancelBtn, T_FAST, {
+                Size = UDim2.new(1, 0, 1, 0),
+                BackgroundColor3 = THEME.DangerColor,
+            })
+            createTween(confirmBtn, T_FAST, { Size = UDim2.new(0, 0, 1, 0) }).Completed:Connect(function()
+                if not confirming then confirmBtn.Visible = false end
+            end)
+        end
+
+        cancelBtn.Activated:Connect(function()
+            if confirming then exitConfirm() else enterConfirm() end
+        end)
+
+        confirmBtn.Activated:Connect(function()
+            if confirming then self:Destroy() end
+        end)
+
+        -- Load saved settings
+        self:UpdateHideMethod(self.HideMethod)
+
+        local savedCurve = settingsCache:Get("AnimCurve")
+        if savedCurve then currentAnimCurve = savedCurve end
+
+        local savedSpeed = settingsCache:Get("AnimSpeed")
+        if savedSpeed then animSpeedMultiplier = savedSpeed end
+
+        if settingsCache:Get("Avatar", false) then
+            self._setAvatarEnabled(true)
+        end
+    end)
+
+    return self
+end
+
+return iOSLibrary
