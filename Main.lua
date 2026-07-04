@@ -1011,7 +1011,7 @@ function iOSLibrary.CreateWindow(title, size)
 
 		local function enterConfirm()
 			confirming = true
-			cancelBtn.Text = "Chance"
+			cancelBtn.Text = "Cancel"
 			createTween(cancelBtn, T_FAST, {
 				Size = UDim2.new(0.5, -3, 1, 0),
 				BackgroundColor3 = THEME.DividerColor,
