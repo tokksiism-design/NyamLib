@@ -732,11 +732,9 @@ function iOSLibrary.CreateWindow(title, size)
 		self.IsOpen = open
 		if open then
 			mainFrame.Visible = true
-			shadowHolder.Visible = self.ShadowEnabled
 			windowScale.Scale = 0.92
 			createTween(windowScale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
 		else
-			shadowHolder.Visible = false
 			createTween(windowScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.92 }).Completed:Connect(function()
 				if not self.IsOpen then mainFrame.Visible = false end
 			end)
@@ -758,7 +756,6 @@ function iOSLibrary.CreateWindow(title, size)
 	function self:Destroy()
 		if self.Destroyed then return end
 		self.Destroyed = true
-		shadowHolder:Destroy()
 		createTween(windowScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.85 }).Completed:Connect(function()
 			screenGui:Destroy()
 		end)
@@ -966,7 +963,6 @@ function iOSLibrary.CreateWindow(title, size)
 
 		-- Применяем сохранённые настройки
 		self:SetHideMethod(self.HideMethod)
-		if settingsCache:Get("Shadow", false) then self:SetShadow(true) end
 		if settingsCache:Get("Avatar", false) then setAvatarEnabled(true) end
 
 		settingsTab:Section("Danger zone")
