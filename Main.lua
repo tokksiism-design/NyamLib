@@ -354,7 +354,7 @@ end
 --  * тень видна в вырезах скруглений = авто-адаптация под радиус
 --  * стороны отступают на (spread + radius), углы точно в своих квадратах
 ----------------------------------------------------
-local function buildShadow(screenGui, mainFrame, spread, radius)
+--[[local function buildShadow(screenGui, mainFrame, spread, radius)
 	spread = spread or 20
 	local inset = spread + radius
 
@@ -413,7 +413,7 @@ local function buildShadow(screenGui, mainFrame, spread, radius)
 	end
 
 	return holder
-end
+end]]--
 
 ----------------------------------------------------
 -- АВАТАР В КРУГЕ (без анимаций)
@@ -573,10 +573,10 @@ function iOSLibrary.CreateWindow(title, size)
 	mainStroke.Thickness = 1
 	mainStroke.Parent = mainFrame
 
-	-- Тень: сиблинг ПОЗАДИ окна, адаптирована под радиус
+	--[[ Тень: сиблинг ПОЗАДИ окна, адаптирована под радиус
 	local shadowHolder = buildShadow(screenGui, mainFrame, 20, CORNER_RADIUS)
 	self.ShadowHolder = shadowHolder
-	self.ShadowEnabled = settingsCache:Get("Shadow", false)
+	self.ShadowEnabled = settingsCache:Get("Shadow", false)]]
 
 	local headerH = IS_MOBILE and 46 or 42
 	local header = Instance.new("Frame")
@@ -743,11 +743,11 @@ function iOSLibrary.CreateWindow(title, size)
 		end
 	end
 
-	function self:SetShadow(enabled)
+	--[[function self:SetShadow(enabled)
 		self.ShadowEnabled = enabled
 		shadowHolder.Visible = enabled and self.IsOpen
 		settingsCache:Set("Shadow", enabled)
-	end
+	end]]
 
 	function self:SetHideMethod(method)
 		self.HideMethod = method
@@ -946,18 +946,18 @@ function iOSLibrary.CreateWindow(title, size)
 		settingsTab:Section("Interface")
 
 		settingsTab:Dropdown("Скрытие меню",
-			{ "Кнопка + крестик", "Тап по заголовку" },
-			self.HideMethod == "Title" and "Тап по заголовку" or "Кнопка + крестик",
+			{ "Кнопка + крестик", "Кнопка + Тап по заголовку" },
+			self.HideMethod == "Title" and "Конопка + Тап по заголовку" or "Кнопка + крестик",
 			function(option)
 				self:SetHideMethod(option == "Тап по заголовку" and "Title" or "Bubble")
 				if option == "Тап по заголовку" then
-					self:Notify("Тапни по названию меню чтобы скрыть", 3)
+					self:Notify("Тапни по названию меню чтобы скрыть", 2)
 				end
 			end)
 
-		settingsTab:Toggle("Тень", settingsCache:Get("Shadow", false), function(state)
+		--[[settingsTab:Toggle("Тень", settingsCache:Get("Shadow", false), function(state)
 			self:SetShadow(state)
-		end)
+		end)]]
 
 		settingsTab:Toggle("Аватар в шапке", settingsCache:Get("Avatar", false), function(state)
 			setAvatarEnabled(state)
@@ -982,7 +982,7 @@ function iOSLibrary.CreateWindow(title, size)
 		local cancelBtn = Instance.new("TextButton")
 		cancelBtn.Size = UDim2.new(1, 0, 1, 0)
 		cancelBtn.BackgroundColor3 = THEME.DangerColor
-		cancelBtn.Text = "Выйти"
+		cancelBtn.Text = "Close"
 		cancelBtn.Font = Enum.Font.GothamBold
 		cancelBtn.TextSize = 14
 		cancelBtn.TextColor3 = THEME.TextColor
@@ -1015,19 +1015,19 @@ function iOSLibrary.CreateWindow(title, size)
 
 		local function enterConfirm()
 			confirming = true
-			cancelBtn.Text = "Отменить"
+			cancelBtn.Text = "Chance"
 			createTween(cancelBtn, T_FAST, {
 				Size = UDim2.new(0.5, -3, 1, 0),
 				BackgroundColor3 = THEME.DividerColor,
 			})
 			confirmBtn.Visible = true
-			confirmBtn.Text = "Выйти"
+			confirmBtn.Text = "Close"
 			createTween(confirmBtn, T_FAST, { Size = UDim2.new(0.5, -3, 1, 0) })
 		end
 
 		local function exitConfirm()
 			confirming = false
-			cancelBtn.Text = "Выйти"
+			cancelBtn.Text = "Close"
 			createTween(cancelBtn, T_FAST, {
 				Size = UDim2.new(1, 0, 1, 0),
 				BackgroundColor3 = THEME.DangerColor,
