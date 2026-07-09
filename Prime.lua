@@ -134,7 +134,8 @@ local _mathFloor = math.floor
 local _mathMax = math.max
 local _mathMin = math.min
 local _mathRandom = math.random
-local _mathAtan2 = math.atan2
+-- math.atan2 объявлен устаревшим и на части сред отсутствует — фолбэк на math.atan(y, x)
+local _mathAtan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 local _mathDeg = math.deg
 local _mathSqrt = math.sqrt
 local _tableInsert = table.insert
@@ -144,7 +145,7 @@ local _tableConcat = table.concat
 local _tableCreate = table.create
 local _tableSort = table.sort
 local _tableUnpack = table.unpack
-local _tableFreeze = table.freeze
+local _tableFreezeRaw = table.freeze
 local _taskSpawn = task.spawn
 local _taskDelay = task.delay
 local _taskWait = task.wait
@@ -170,6 +171,21 @@ local LocalPlayer = Players.LocalPlayer
 -- Захват метода Create у TweenService: даже если кто-то позже перепишет
 -- getgenv().TweenService или обёртки — наша ссылка уже у нас.
 local _tsCreate = TweenService.Create
+
+--// БЕЗОПАСНАЯ заморозка таблиц.
+--// КРИТИЧНО для мобильных экзекуторов (Trigon Evo и др.): их песочница может
+--// навешивать на таблицы защищённые метатейблы, и тогда table.freeze кидает
+--// "invalid argument #1 to 'freeze' (table has a protected metatable)".
+--// На части экзекуторов table.freeze вообще отсутствует.
+--// Заморозка — это ДОПОЛНИТЕЛЬНАЯ защита от monkey-patch, а не критичная
+--// логика, поэтому она никогда не должна ронять UI: любая ошибка глотается,
+--// таблица возвращается как есть.
+local function _tableFreeze(t)
+	if _tableFreezeRaw then
+		_pcall(_tableFreezeRaw, t)
+	end
+	return t
+end
 
 --// ====================================================================
 --// Тема (дефолт) и сборка темы под конкретное окно
