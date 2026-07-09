@@ -872,7 +872,7 @@ attachComponentAPI = function(api, container, T)
 	----------------------------------------------------------------
 	-- ColorPicker: 2 вида, как в ImGui.
 	--   Mode = "Picker"  — SV-квадрат + горизонтальная полоса оттенка (ImGui ColorPicker)
-	--   Mode = "Palette" — сетка готовых свотчей (ImGui palette buttons)
+	--   Mode = "Palette" — сетка готовых ��вотчей (ImGui palette buttons)
 	--   Mode = "Both"    — пикер + палитра под ним
 	--   Alpha = true     — дополнительная полоса прозрачности; колбэк получает (color, alpha)
 	function api:CreateColorPicker(cfg)
@@ -2204,8 +2204,17 @@ end
 
 _tableFreeze(DefaultTheme)
 
-return _tableFreeze(_setmetatable({}, {
+-- ВАЖНО (Luau): table.freeze нельзя вызывать на таблице с защищённым
+-- метатейблом, а setmetatable — на уже замороженной. Поэтому:
+--   1) замораживаем ВНУТРЕННЮЮ таблицу методов UILib (реальная цель
+--      защиты от monkey-patch — подменить CreateWindow и перехватить
+--      колбэки через прокси не выйдет, __index ведёт в frozen-таблицу);
+--   2) прокси НЕ фризим: запись в него блокирует __newindex, а метатейбл
+--      закрыт через __metatable = "locked".
+_tableFreeze(UILib)
+
+return _setmetatable({}, {
 	__index = UILib,
 	__metatable = "locked", -- getmetatable вернёт строку, а не таблицу с методами
 	__newindex = function() end, -- молча игнорируем попытки записи
-}))
+})
