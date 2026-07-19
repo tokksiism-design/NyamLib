@@ -510,11 +510,16 @@ function iOSLibrary.CreateWindow(title, size)
 
 	local camera = Workspace.CurrentCamera
 	local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
-	local desired = size or Vector2.new(470, 330)
+
+	local desired = (typeof(size) == "table" and size.Size) 
+    or (typeof(size) == "Vector2" and size) 
+    or Vector2.new(470, 330)
+
 	local windowSize = Vector2.new(
-		math.min(desired.X, viewport.X - 24),
-		math.min(desired.Y, viewport.Y - 60)
+	math.min(desired.X, viewport.X - 24),
+	math.min(desired.Y, viewport.Y - 60)
 	)
+
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "iOS_Library_Menu"
